@@ -1,0 +1,11 @@
+{
+  "_说明": "复制本文件为 config.json 后填入你自己的值。config.json 已被 .gitignore 忽略，不会上传 GitHub。",
+  "feishuUrl": "https://你的飞书域名.feishu.cn/base/你的base_token?table=你的table_id",
+  "source": "feishu_records.ndjson",
+  "cloud": {
+    "_说明": "由 WorkBuddy 云服务的 publicConfig 提供，可安全放在前端；留空则页面为只读快照。",
+    "endpoint": "https://你的应用.app.workbuddy.host",
+    "oauthRelayBaseUrl": "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
+    "publishableKey": "wbpk_你的publishableKey"
+  }
+}

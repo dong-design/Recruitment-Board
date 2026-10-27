@@ -1,0 +1,24 @@
+# 隐私与密钥 —— 绝不上传
+config.json
+actions.json
+.env
+*.env
+dashboard/.feishu-app.json
+.feishu_app.env
+
+# 个人数据导出 —— 绝不上传（只忽略根目录，sample/ 里的示例数据要保留）
+/feishu_records.ndjson
+/feishu_records.manifest.json
+*.manifest.json
+
+# 生成产物
+dashboard/index.html
+
+# 常规
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+.vscode/
+.idea/
+.workbuddy/
