@@ -15,8 +15,8 @@
 ## 一、先跑起来看效果（不用任何配置）
 
 ```bash
-git clone <你的仓库地址>
-cd recruit-board
+git clone https://github.com/dong-design/Recruitment-Board.git
+cd Recruitment-Board
 python build_dashboard.py     # 用 sample/ 里的示例数据生成 dashboard/index.html
 python -m http.server 8000 -d dashboard    # 然后打开 http://localhost:8000
 ```
