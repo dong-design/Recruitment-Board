@@ -161,6 +161,13 @@ a:hover{text-decoration:underline}
 .it.flash{background:#EFF6FF;border-color:#2563EB;transition:background .3s,border-color .3s}
 .tl{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
 .tl .d{text-align:center;font-size:12px}
+.tl button.d{font:inherit;font-size:12px;color:inherit;border:0;background:transparent;padding:5px 0;border-radius:8px;cursor:pointer;min-width:0}
+.tl button.d:hover{background:#EFF6FF}
+.tl button.d:focus-visible{outline:2px solid #2563EB;outline-offset:2px}
+.day-item{display:block;width:100%;text-align:left;border:1px solid #E5E7EB;border-radius:8px;padding:12px;margin-top:10px;background:#fff;color:inherit;font:inherit}
+button.day-item{cursor:pointer}
+button.day-item:hover{border-color:#93C5FD;background:#EFF6FF}
+.day-item .sub{display:block;margin-top:5px;white-space:pre-wrap;overflow-wrap:anywhere}
 .tl .bar{height:24px;border-radius:6px;background:#EEF0F3;margin:5px 0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600}
 .tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;position:sticky;top:0;z-index:20;background:#F5F6F8;padding:8px 0}
 .tab{padding:7px 16px;border:1px solid #E5E7EB;background:#fff;border-radius:8px;cursor:pointer;font-size:13px}
@@ -447,9 +454,10 @@ const view = r => {
   const o = OVERRIDES[r.id];
   if (!o) return r;
   return Object.assign({}, r, {
-    status: o.status || r.status,
-    progress: (o.progress && o.progress.length) ? o.progress : r.progress,
-    key: o.key_date || r.key,
+    status: o.status !== undefined ? o.status : r.status,
+    progress: o.progress !== undefined ? (o.progress || []) : r.progress,
+    key: o.key_date !== undefined ? o.key_date : r.key,
+    hasDl: o.key_date !== undefined ? !!o.key_date : r.hasDl,
     comment: o.comment || '',
     edited: true
   });
@@ -505,13 +513,17 @@ function renderSyncTime(){
 
 const APIQ = () => location.search || '';   // 必须带 sharecode，否则会被分享网关拦下
 
+let saveInFlight = false, saveRevision = 0;
 async function pullLive(){
+  if (saveInFlight) return false;
+  const revision = saveRevision;
   try {
-    const resp = await fetch('/api/pull' + APIQ(), { cache: 'no-store' });
+    const resp = await fetch('/api/pull' + APIQ(), { cache: 'no-store', signal: AbortSignal.timeout(25000) });
     const txt = await resp.text();
     let j = null;
     try { j = JSON.parse(txt); } catch (e) { j = null; }
     if (!j || !j.ok || !j.records) return false;
+    if (saveInFlight || revision !== saveRevision) return false;
     R = j.records;
     SUBS = j.subs || [];
     LAST_PULL = new Date();
@@ -564,16 +576,17 @@ function renderAll(){
     + (future.length > limit ? `<div id="dl-more" class="sub" style="cursor:pointer;color:#2563EB;padding-top:10px">展开其余 ${future.length - limit} 条</div>` : '')
     + (DL_ALL && future.length > 7 ? `<div id="dl-less" class="sub" style="cursor:pointer;color:#2563EB;padding-top:10px">收起</div>` : '');
 
+  timelineItems = dated;
   let tlHtml = '';
   for (let i = 0; i < 7; i++) {
     const d = new Date(TODAY); d.setDate(d.getDate() + i);
     const key = isoLocal(d);
     const n = dated.filter(x => x.date === key).length;
     const col = n === 0 ? '#EEF0F3' : n >= 4 ? '#DC2626' : n >= 2 ? '#F59E0B' : '#2563EB';
-    tlHtml += `<div class="d"><div>${key.slice(5)}</div><div class="bar" style="background:${col}">${n||''}</div><div class="sub">${['日','一','二','三','四','五','六'][d.getDay()]}</div></div>`;
+    tlHtml += `<button type="button" class="d" data-day="${key}" aria-label="${key}，${n} 件事项，点击查看" aria-haspopup="dialog"><div>${key.slice(5)}</div><div class="bar" style="background:${col}">${n||''}</div><div class="sub">${['日','一','二','三','四','五','六'][d.getDay()]}</div></button>`;
   }
   $('tl').innerHTML = tlHtml + `<div style="grid-column:1/-1;display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:11px;color:#6B7280;margin-top:6px">
-      <span>柱内数字 = 当天到期的事项数（企业关键日期 + 提醒节点）</span>
+      <span>点击日期查看当天事项 · 数字 = 企业截止事项 + 提醒节点</span>
       <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#DC2626;margin-right:4px"></i>≥4 件 · 爆满</span>
       <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#F59E0B;margin-right:4px"></i>2–3 件</span>
       <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#2563EB;margin-right:4px"></i>1 件</span>
@@ -602,6 +615,45 @@ function renderAll(){
   drawTable($('q').value);
   drawSubs($('qs').value);
 }
+
+// Use the exact same list as the seven-day counts, including active filters.
+let timelineItems = [];
+function openDay(day){
+  const items = timelineItems.filter(item => item.date === day);
+  currentRid = null;
+  $('modal').innerHTML = `<button type="button" class="close" aria-label="关闭当天事项" onclick="closeM()">×</button>
+    <h3 id="day-title">${esc(day)} 的事项</h3>
+    <div class="sub">共 ${items.length} 件 · 与未来 7 天的统计一致${isFiltered() ? '（已应用当前企业筛选）' : ''}</div>
+    ${items.length ? items.map(item => {
+      const tag = item.rid ? 'button' : 'div';
+      return `<${tag} class="day-item"${item.rid ? ` type="button" data-day-rid="${esc(item.rid)}"` : ''}>
+        <span class="badge ${item.rid ? 'b-blu' : 'b-org'}">${item.rid ? '报名截止' : '提醒节点'}</span>
+        <strong>${esc(item.name)}</strong>
+        ${item.tip ? `<span class="sub">${esc(item.tip)}</span>` : ''}
+        ${item.rid ? '<span class="sub">查看企业详情 ›</span>' : ''}
+      </${tag}>`;
+    }).join('') : '<div class="day-item sub">当天暂无事项。</div>'}`;
+  $('modal').setAttribute('role', 'dialog');
+  $('modal').setAttribute('aria-label', day + ' 的事项');
+  $('mask').classList.add('on');
+  document.body.classList.add('modal-open');
+  $('modal').scrollTop = 0;
+  $('modal').querySelector('.close').focus();
+}
+$('tl').addEventListener('click', event => {
+  const day = event.target.closest('[data-day]');
+  if (day) openDay(day.dataset.day);
+});
+$('modal').addEventListener('click', event => {
+  const item = event.target.closest('[data-day-rid]');
+  if (!item) return;
+  const record = V().find(r => r.id === item.dataset.dayRid);
+  if (record) {
+    currentRid = record.id;
+    $('modal').setAttribute('aria-label', record.name + ' 的详情');
+    openModal(record);
+  }
+});
 
 function grouped(list){
   const todayKey = isoLocal(TODAY);
@@ -671,7 +723,7 @@ function editForm(r){
     <div class="fld"><label>进展（可多选，点一下选中/取消）</label>
       <div class="chips">${PROG_OPTS.map((p,i)=>`<span class="chip c${i}"><input type="checkbox" class="ed-prog" value="${p}" id="pg-${p}"${(r.progress||[]).includes(p)?' checked':''}><label for="pg-${p}">${p}</label></span>`).join('')}</div>
     </div>
-    <div class="fld"><label>关键日期（网申截止 / 笔试 / 面试）</label><input type="date" id="ed-key" value="${esc(r.key||'')}"></div>
+    <div class="fld"><label>报名截止日</label><input type="date" id="ed-key" value="${esc(r.hasDl ? r.key : '')}"></div>
     <div class="fld"><label>我的备注（可选）</label><input type="text" id="ed-comment" value="${esc(r.comment||'')}" placeholder="例如：已约 10-31 上午场"></div>
     <div id="ed-msg"></div>
     <button class="btn pri" id="ed-save">保存</button>
@@ -701,6 +753,7 @@ function rollbackLocal(id, prev){
 
 $('modal').addEventListener('click', async e => {
   if (e.target.id !== 'ed-save') return;
+  if (saveInFlight) { cmsg('上一笔修改仍在保存，请稍后重试。', 'warn'); return; }
   const id = currentRid; if (!id) return;
   const r = view(R.find(x => x.id === id));
   const btn = $('ed-save'); btn.disabled = true; btn.textContent = '保存中…';
@@ -713,7 +766,10 @@ $('modal').addEventListener('click', async e => {
   const newStr = `${status} / ${progress.join('+') || '—'} / ${key_date||'—'}`;
 
   // 乐观更新：先在本地生效并关掉弹窗，写飞书放到后台，避免等 3~4 秒
+  const previousOverride = OVERRIDES[id];
   delete OVERRIDES[id];
+  saveInFlight = true; saveRevision++;
+  try {
   const prev = applyLocal(id, patch);
   renderAll();
   closeM();
@@ -732,11 +788,14 @@ $('modal').addEventListener('click', async e => {
       let j = null; try { j = JSON.parse(txt); } catch (e) { j = null; }
       if (j && j.ok) {
         // 成功：后台补记一条已同步日志 + 清掉可能残留的覆盖层，不阻塞界面
-        cloud.database.from('job_log')
-          .insert({ rid: id, name: r.name, field: '状态/进展/日期', old_value: oldStr, new_value: newStr })
-          .then(() => cloud.database.from('job_log').update({ synced: true }).eq('rid', id).eq('synced', false));
-        cloud.database.from('job_overrides').delete().eq('rid', id);
-        cmsg('已同步到飞书：' + r.name + ' → ' + newStr, 'ok');
+        // Insert only this operation as synced; never acknowledge earlier pending edits.
+        let auditError = false;
+        try {
+          const logResult = await cloud.database.from('job_log').insert({ rid: id, name: r.name, field: '状态/进展/日期', old_value: oldStr, new_value: newStr, synced: true });
+          const clearResult = await cloud.database.from('job_overrides').delete().eq('rid', id);
+          auditError = !!(logResult.error || clearResult.error);
+        } catch (_) { auditError = true; }
+        cmsg('已同步到飞书：' + r.name + ' → ' + newStr + (auditError ? '；云端日志或覆盖层清理失败，请刷新核对。' : ''), auditError ? 'warn' : 'ok');
         return;
       }
       apiErr = (j && j.error) || '后端未返回成功';
@@ -745,6 +804,7 @@ $('modal').addEventListener('click', async e => {
     if (apiErr) {
       // 实时通道失败 → 回滚本地显示，退回云端队列
       rollbackLocal(id, prev);
+      if (previousOverride) OVERRIDES[id] = previousOverride;
       renderAll();
       const upd = await cloud.database.from('job_overrides').update(patch).eq('rid', id).select();
       let ok = (upd.data || []).length > 0;
@@ -769,9 +829,14 @@ $('modal').addEventListener('click', async e => {
   rollbackLocal(id, prev);
   renderAll();
   cmsg('未登录，改动未保存。登录后才能写入飞书。', 'warn');
+  } catch (error) {
+    if (previousOverride) OVERRIDES[id] = previousOverride;
+    cmsg('保存流程失败，请刷新核对：' + et(error), 'err');
+  } finally { saveInFlight = false; saveRevision++; }
 });
 
 async function resetOverride(id){
+  if (saveInFlight) { cmsg('正在保存，请稍后重试。', 'warn'); return; }
   if (!confirm('恢复为飞书多维表格里的原始值？你在这条记录上的云端改动会被删除。')) return;
   const { data, error } = await cloud.database.from('job_overrides').delete().eq('rid', id).select();
   if (error) { cmsg('恢复失败：' + et(error), 'err'); return; }
@@ -1041,12 +1106,19 @@ document.addEventListener('keydown', e => {
 """
 
 
+def script_json(value):
+    # Escape HTML parser delimiters, even inside JSON string literals.
+    return (json.dumps(value, ensure_ascii=False).replace("&", "\\u0026")
+            .replace("<", "\\u003c").replace(">", "\\u003e")
+            .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
+
+
 def main():
     data = build()
     cfg = dict(CLOUD_CONFIG)
     os.makedirs(OUT_DIR, exist_ok=True)
-    html = TEMPLATE.replace("__DATA__", json.dumps(data, ensure_ascii=False))
-    html = html.replace("__CLOUD__", json.dumps(cfg, ensure_ascii=False))
+    html = TEMPLATE.replace("__DATA__", script_json(data))
+    html = html.replace("__CLOUD__", script_json(cfg))
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"written {OUT} ({len(html)/1024:.1f} KB), records={len(data['records'])}, actions={len(data['actions'])}")

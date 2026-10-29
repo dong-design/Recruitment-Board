@@ -7,6 +7,18 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
+// Read only known server settings; explicit environment variables take precedence.
+for (const file of [path.join(__dirname, '.env'), path.join(__dirname, '..', '.env'), path.join(__dirname, '..', '.feishu_app.env')]) {
+  if (!fs.existsSync(file)) continue;
+  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^\s*(FEISHU_APP_ID|FEISHU_APP_SECRET|FEISHU_APP_TOKEN|FEISHU_TABLE_ID|BOARD_USERNAME|BOARD_PASSWORD|PORT|HOST)\s*=\s*(.*?)\s*$/);
+    if (match && process.env[match[1]] === undefined) {
+      let value = match[2];
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+      process.env[match[1]] = value;
+    }
+  }
+}
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
 // 凭证来源优先级：环境变量 > 工作区 .feishu_app.env > dashboard/.feishu-app.json
@@ -43,20 +55,39 @@ function loadCredentials() {
 const CRED = loadCredentials();
 const APP_ID = CRED.id;
 const APP_SECRET = CRED.secret;
-// 表格坐标也可以写在 .feishu-app.json 里（app_token / table_id）
-if (!APP_TOKEN || !TABLE_ID) {
-  try {
-    const f = path.join(ROOT, '.feishu-app.json');
-    if (fs.existsSync(f)) {
-      const j = JSON.parse(fs.readFileSync(f, 'utf8'));
-      if (!APP_TOKEN && j.app_token) process.env.FEISHU_APP_TOKEN = j.app_token;
-      if (!TABLE_ID && j.table_id) process.env.FEISHU_TABLE_ID = j.table_id;
-    }
-  } catch (e) { /* 忽略 */ }
+const localConfig = (() => {
+  const f = path.join(ROOT, '.feishu-app.json');
+  return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
+})();
+const APP_TOKEN = process.env.FEISHU_APP_TOKEN || localConfig.app_token || '';
+const TABLE_ID = process.env.FEISHU_TABLE_ID || localConfig.table_id || '';
+const authFile = path.join(ROOT, '.board-auth.json');
+const authConfig = fs.existsSync(authFile) ? JSON.parse(fs.readFileSync(authFile, 'utf8')) : {};
+const USERNAME = process.env.BOARD_USERNAME || authConfig.username || 'owner';
+const PASSWORD = process.env.BOARD_PASSWORD || authConfig.password || '';
+const crypto = require('crypto');
+const equal = (a, b) => crypto.timingSafeEqual(
+  crypto.createHash('sha256').update(a).digest(), crypto.createHash('sha256').update(b).digest());
+function authorize(req, res) {
+  // Basic 认证开关：部署平台注入 PORT 且其网关不透传 Authorization 头，线上默认关闭（页面公开只读、编辑走云登录）；
+  // 本地调试默认开启。可用 BOARD_AUTH=on/off 显式覆盖。
+  const authEnabled = process.env.BOARD_AUTH
+    ? process.env.BOARD_AUTH !== 'off'
+    : !process.env.PORT;
+  if (!authEnabled) return true;
+  if (PASSWORD.length < 16) {
+    send(res, 503, { ok: false, error: '请配置至少 16 位的 BOARD_PASSWORD' });
+    return false;
+  }
+  const header = req.headers.authorization || '';
+  const supplied = /^Basic /i.test(header) ? Buffer.from(header.slice(6), 'base64').toString('utf8') : '';
+  if (!equal(supplied, USERNAME + ':' + PASSWORD)) {
+    res.setHeader('WWW-Authenticate', 'Basic realm="Recruit Board", charset="UTF-8"');
+    send(res, 401, { ok: false, error: '需要看板账号认证' });
+    return false;
+  }
+  return true;
 }
-// 多维表格坐标：从环境变量或 dashboard/.feishu-app.json 读取，不要硬编码
-const APP_TOKEN = process.env.FEISHU_APP_TOKEN || '';
-const TABLE_ID = process.env.FEISHU_TABLE_ID || '';
 const API = 'https://open.feishu.cn/open-apis';
 
 let cached = { token: '', exp: 0 };
@@ -66,6 +97,7 @@ async function getToken() {
   if (!APP_ID || !APP_SECRET) throw new Error('飞书应用凭证未配置');
   const r = await fetch(API + '/auth/v3/tenant_access_token/internal', {
     method: 'POST',
+    signal: AbortSignal.timeout(15000),
     headers: { 'Content-Type': 'application/json; charset=utf-8' },
     body: JSON.stringify({ app_id: APP_ID, app_secret: APP_SECRET }),
   });
@@ -76,8 +108,9 @@ async function getToken() {
 }
 
 async function api(pathname, opts = {}) {
+  if (!APP_TOKEN || !TABLE_ID) throw new Error('飞书表格坐标未配置');
   const t = await getToken();
-  const r = await fetch(API + pathname, Object.assign({}, opts, {
+  const r = await fetch(API + pathname, Object.assign({ signal: AbortSignal.timeout(15000) }, opts, {
     headers: Object.assign({ Authorization: 'Bearer ' + t, 'Content-Type': 'application/json; charset=utf-8' }, opts.headers || {}),
   }));
   return r.json();
@@ -163,10 +196,20 @@ async function pullAll() {
     rows = rows.concat((j.data && j.data.items) || []);
     pageToken = (j.data && j.data.page_token) || '';
   } while (pageToken && ++guard < 10);
+  if (pageToken) throw new Error('记录超过分页上限，拒绝返回不完整数据');
   return transform(rows);
 }
 
 function buildFields(b) {
+  if (!b || typeof b !== 'object' || Array.isArray(b)) throw new Error('请求必须是对象');
+  if (!/^rec[a-zA-Z0-9]+$/.test(b.rid || '')) throw new Error('无效的记录 ID');
+  const allowed = ['rid', 'status', 'progress', 'key_date', 'comment'];
+  if (Object.keys(b).some(k => !allowed.includes(k))) throw new Error('包含不支持的字段');
+  if (b.status !== undefined && !['待投递','已投递','已截止','挂了','Offer','实习offer'].includes(b.status)) throw new Error('无效的投递状态');
+  if (b.progress !== undefined && (!Array.isArray(b.progress) || b.progress.length > 7 || b.progress.some(p => !['ai面','测评','笔试','一面','二面','三面','体检'].includes(p)))) throw new Error('无效的进展');
+  if (b.key_date != null && b.key_date !== '' && (typeof b.key_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(b.key_date) || !Number.isFinite(toMs(b.key_date)) || dayStr(toMs(b.key_date)) !== b.key_date)) throw new Error('无效的截止日期');
+  if (b.comment != null && (typeof b.comment !== 'string' || b.comment.length > 2000)) throw new Error('无效的备注');
+  if (!['status','progress','key_date'].some(k => Object.hasOwn(b, k))) throw new Error('没有可同步的字段');
   const f = {};
   if (b.status !== undefined) f['投递'] = b.status;
   if (b.progress !== undefined) f['进展'] = b.progress;
@@ -190,6 +233,7 @@ function send(res, code, obj) {
 }
 
 function serveStatic(req, res, urlPath) {
+  if (!['/', '/index.html'].includes(urlPath)) { res.writeHead(404); return res.end('not found'); }
   const rel = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '');
   // 安全：隐藏文件（含凭证文件）与 node_modules 一律不对外提供
   const segs = rel.split(/[\\/]/);
@@ -209,38 +253,58 @@ function serveStatic(req, res, urlPath) {
   });
 }
 
-http.createServer(async (req, res) => {
-  const u = new URL(req.url, 'http://x');
-  const p = u.pathname;
+// A per-record queue prevents concurrent writes from overtaking one another.
+const writes = new Map();
+function enqueueWrite(rid, fields) {
+  const prior = writes.get(rid) || Promise.resolve();
+  const next = prior.catch(() => {}).then(() => writeRecord(rid, fields));
+  writes.set(rid, next);
+  return next.finally(() => { if (writes.get(rid) === next) writes.delete(rid); });
+}
 
-  if (p === '/api/health') {
-    return send(res, 200, { ok: true, configured: !!(APP_ID && APP_SECRET) });
-  }
-
-  if (p === '/api/pull') {
-    try {
-      const data = await pullAll();
-      return send(res, 200, { ok: true, at: new Date().toISOString(), records: data.records, subs: data.subs });
-    } catch (e) {
-      return send(res, 200, { ok: false, error: String(e.message || e) });
+function createServer() {
+  let windowStart = Date.now(), requestCount = 0;
+  return http.createServer(async (req, res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    const p = new URL(req.url, 'http://localhost').pathname;
+    if (p === '/api/health' && req.method === 'GET') {
+      return send(res, 200, { ok: true, configured: !!(APP_ID && APP_SECRET && APP_TOKEN && TABLE_ID), authConfigured: PASSWORD.length >= 16 });
     }
-  }
-
-  if (p === '/api/sync' && req.method === 'POST') {
-    let raw = '';
-    req.on('data', c => { raw += c; if (raw.length > 1e6) req.destroy(); });
-    req.on('end', async () => {
+    if (!authorize(req, res)) return;
+    if (req.headers.origin && req.headers.origin !== 'http://' + req.headers.host && req.headers.origin !== 'https://' + req.headers.host) {
+      return send(res, 403, { ok: false, error: '不允许跨站请求' });
+    }
+    if (p.startsWith('/api/')) {
+      if (Date.now() - windowStart >= 60000) { windowStart = Date.now(); requestCount = 0; }
+      if (++requestCount > 120) return send(res, 429, { ok: false, error: '请求过于频繁' });
+    }
+    if (p === '/api/pull' && req.method === 'GET') {
       try {
-        const b = JSON.parse(raw || '{}');
-        if (!b.rid) return send(res, 200, { ok: false, error: '缺少 rid' });
-        await writeRecord(b.rid, buildFields(b));
-        return send(res, 200, { ok: true, rid: b.rid });
-      } catch (e) {
-        return send(res, 200, { ok: false, error: String(e.message || e) });
-      }
-    });
-    return;
-  }
-
-  return serveStatic(req, res, p);
-}).listen(PORT, '0.0.0.0', () => console.log('listening on ' + PORT));
+        const data = await pullAll();
+        return send(res, 200, { ok: true, at: new Date().toISOString(), ...data });
+      } catch (e) { return send(res, 502, { ok: false, error: e.message }); }
+    }
+    if (p === '/api/sync' && req.method === 'POST') {
+      if (!(req.headers['content-type'] || '').startsWith('application/json')) return send(res, 415, { ok: false, error: '需要 application/json' });
+      let raw = '', size = 0;
+      try {
+        for await (const chunk of req) {
+          size += chunk.length;
+          if (size > 16384) { send(res, 413, { ok: false, error: '请求过大' }); return; }
+          raw += chunk;
+        }
+        let body, fields;
+        try { body = JSON.parse(raw); fields = buildFields(body); }
+        catch (e) { return send(res, 400, { ok: false, error: e.message }); }
+        await enqueueWrite(body.rid, fields);
+        return send(res, 200, { ok: true, rid: body.rid });
+      } catch (e) { return send(res, 502, { ok: false, error: e.message }); }
+    }
+    if (p.startsWith('/api/')) return send(res, 405, { ok: false, error: '不支持的接口或请求方法' });
+    if (!['GET', 'HEAD'].includes(req.method)) return send(res, 405, { ok: false });
+    return serveStatic(req, res, p);
+  });
+}
+if (require.main === module) createServer().listen(PORT, process.env.HOST || '0.0.0.0', () => console.log('listening on ' + PORT));
+module.exports = { createServer, buildFields, transform };

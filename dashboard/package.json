@@ -5,7 +5,8 @@
   "description": "秋招进度看板（带飞书双向同步后端）",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test ../tests/*.test.js"
   },
   "engines": {
     "node": ">=18"

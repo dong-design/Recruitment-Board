@@ -109,11 +109,18 @@ python build_dashboard.py
 3. 打开你的多维表格 →「···」→ 添加文档协作者 → 搜应用名 → 给**可编辑**
 4. **创建版本并申请发布**（不发布的应用加不了协作者，这是最常见的坑）
 5. 把 App ID / App Secret 写进 `.env` 或 `dashboard/.feishu-app.json`（服务端读取，不进前端）
-6. 启动服务：
+6. 配置看板访问密码，然后启动服务：
 
 ```bash
+node scripts/setup-auth.js     # 创建 dashboard/.board-auth.json，不覆盖已有密码
 cd dashboard && npm start      # 或 node server.js
 ```
+
+打开页面时浏览器会要求输入独立看板账号，默认用户名是 `owner`，密码保存在本机 `dashboard/.board-auth.json`。也可通过 `BOARD_USERNAME` / `BOARD_PASSWORD` 配置，密码至少 16 位。该认证保护页面快照及全部读写接口；原有云服务登录用于日志和离线队列，仍独立保留。未配置看板密码时返回 503，不会开放数据。
+
+服务端按环境变量、`dashboard/.env`、项目 `.env`、项目 `.feishu_app.env` 的顺序读取配置，环境变量优先。飞书配置也可放在 `dashboard/.feishu-app.json`，包含 `app_id`、`app_secret`、`app_token`、`table_id`。表格坐标必须配置。
+
+默认仅监听 `127.0.0.1`。部署容器时设置 `HOST=0.0.0.0`，并通过 HTTPS 网关访问；Basic 认证需要 HTTPS 保护传输。只允许看板账号操作服务端配置的这一张表。静态托管不经过此认证，因此静态公开演示只能使用 sample 数据。
 
 接口：
 
@@ -142,6 +149,7 @@ cd dashboard && npm start      # 或 node server.js
 |---|---|
 | `config.json` | 含你的飞书表格地址、云服务 key |
 | `dashboard/.feishu-app.json`、`.env` | 含 **App Secret**，泄露等于别人能改你的表 |
+| `dashboard/.board-auth.json` | 看板访问账号和密码 |
 | `feishu_records.ndjson` | 你的全部公司、岗位、备注 |
 | `dashboard/index.html` | 生成产物，里面**内嵌了全部数据** |
 
@@ -191,6 +199,16 @@ recruit-board/
 `build_dashboard.py` 里的 `PROG_BG` / `PROG_FG` 两个数组，顺序对应 `PROG_OPTS`。
 
 ---
+
+## 回归测试
+
+```bash
+python build_dashboard.py
+python tests/test_generator.py
+node --test tests/server.test.js tests/frontend.test.js
+```
+
+自动测试使用模拟飞书接口，不改真实数据，覆盖启动、认证、字段校验、读写回查、清空字段、写入排序、失败恢复、前端日志和脚本安全序列化。个人工作区的真实联调结果见 `TEST_REPORT.md`。
 
 ## License
 
