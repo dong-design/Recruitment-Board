@@ -90,7 +90,7 @@ python -m http.server 8000 --bind 127.0.0.1 -d dashboard
 
 ### 1. 准备多维表格
 
-字段名称需与下表一致。不同岗位请建立独立记录，再通过「父记录」关联到集团。
+字段名称需与下表一致。不用手动逐个建字段：跑 [`scripts/setup-feishu-template.py`](scripts/setup-feishu-template.py) 一键建表，或导入 [`sample/feishu_template.csv`](sample/feishu_template.csv) 后调整列类型——两种方式详见 [模板使用说明](docs/FEISHU_TEMPLATE.md)。
 
 | 字段 | 类型 | 用途 |
 | --- | --- | --- |
