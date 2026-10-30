@@ -90,10 +90,16 @@ let jobSaveState = null;
 const saveNotice = document.createElement('div');
 saveNotice.id = 'job-save-notice'; saveNotice.setAttribute('role', 'status');
 $('cmsg').after(saveNotice);
-function showJobSave(operation, phase, message){
+let saveNoticeTimer = null;
+function scheduleSaveNoticeDismiss(success){
+  clearTimeout(saveNoticeTimer);
+  if (success) { const content = saveNotice.innerHTML; saveNoticeTimer = setTimeout(() => { if (saveNotice.innerHTML === content) saveNotice.replaceChildren(); }, 5000); }
+}
+function showJobSave(operation, phase, message, warning = false){
   if (jobSaveState !== operation) return;
   operation.phase = phase;
   saveNotice.innerHTML = `<div class="msg ${phase === 'failed' ? 'err' : phase === 'saved' ? 'ok' : 'warn'}">${esc(message)}${phase === 'failed' ? ' <button class="btn" id="retry-job-save">重试这次修改</button>' : ''}</div>`;
+  scheduleSaveNoticeDismiss(phase === 'saved' && !warning);
   const retry = $('retry-job-save');
   if (retry) retry.onclick = () => {
     if (saveInFlight) return;
@@ -120,14 +126,14 @@ function startJobSave(id, patch){
     try {
       const saved = await plannerRequest('/api/sync', { rid: id, ...patch });
       succeeded = true;
-      showJobSave(operation, 'saved', '已同步飞书：' + base.name + (saved.warning ? '；' + saved.warning : ''));
+      showJobSave(operation, 'saved', '已同步飞书：' + base.name + (saved.warning ? '；' + saved.warning : ''), !!saved.warning);
       // Optional cloud history must never turn a successful Feishu write into a failed save.
       if (session && cloud) {
         try {
           const cleared = await cloud.database.from('job_overrides').delete().eq('rid', id);
           const logged = await cloud.database.from('job_log').insert({ rid: id, name: base.name, field: '岗位状态/时间', old_value: oldValue, new_value: `${patch.status} / ${patch.apply_date || '—'}`, synced: true });
           if (cleared.error || logged.error) throw new Error('云日志未更新');
-        } catch (_) { showJobSave(operation, 'saved', '岗位已同步飞书；云日志或旧覆盖层清理失败，请核对待处理队列。'); }
+        } catch (_) { showJobSave(operation, 'saved', '岗位已同步飞书；云日志或旧覆盖层清理失败，请核对待处理队列。', true); }
       }
     } catch (error) {
       if (!succeeded) {

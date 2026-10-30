@@ -62,3 +62,11 @@ test('a second save is blocked while the first is pending', async () => {
   const f = fixture('ok'); f.state.saveInFlight = true; await f.save();
   assert.equal(f.logs.length, 0);
 });
+
+test('change history renders before and after safely and labels legacy records', () => {
+  const snippet=source.slice(source.indexOf('function changeValue('),source.indexOf('async function loadLogs('));
+  const context={esc:s=>String(s).replaceAll('<','&lt;')};vm.createContext(context);vm.runInContext(snippet,context);
+  const html=context.logRows([{changes:[{field:'进展',before:['笔试'],after:['笔试','一面'],beforeKnown:true}],name:'<test>',synced:true}],true);
+  assert.ok(html.includes('笔试、一面'));assert.ok(html.includes('old-value'));assert.ok(html.includes('&lt;test>'));
+  assert.ok(context.logRows([{fields:{'进展':[]}}],true).includes('历史记录未保存旧值'));
+});

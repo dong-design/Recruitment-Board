@@ -5,6 +5,14 @@ let calendarDate = WE.day(Date.now()), calendarMode = 'month', workspaceReturnFo
 try { const saved=JSON.parse(localStorage.getItem('recruit.workspace.filters')||'{}'); workspaceQuery=String(saved.query||''); workspaceQuick=['deadline','exam','waiting','material'].includes(saved.quick)?saved.quick:''; } catch (_) {}
 function workspaceMatch(r){return WE.matches(r,workspaceQuery,workspaceQuick);}
 function workspaceActive(){return !!(workspaceQuery.trim()||workspaceQuick);}
+function actionLinks(r){
+  const own=WE.links(r);
+  if (!r.link && r.parentId) {
+    const parent=jobById(r.parentId);
+    if(parent?.link){const entry=WE.links({link:parent.link})[0];if(entry&&!own.some(l=>l.url===entry.url)) own.unshift({...entry,label:'集团招聘入口'});}
+  }
+  return own;
+}
 function allJobs(){return [...V(),...SUBS.map(view)];}
 function jobById(id){return allJobs().find(r=>r.id===id);}
 const searchRoot=document.createElement('section');searchRoot.className='card workspace-search';
@@ -60,11 +68,21 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('keydown',e=>{if(e.target.matches('#cols .it')&&['Enter',' '].includes(e.key)){e.preventDefault();openModal(jobById(e.target.dataset.id));}});
 const previousRenderAll=renderAll;
-renderAll=function(){previousRenderAll();renderWorkspace();};
+renderAll=function(){const x=window.scrollX,y=window.scrollY;previousRenderAll();renderWorkspace();window.scrollTo({left:x,top:y,behavior:"instant"});};
 
 // Keep existing notification controls; replace the daily list with grouped actions.
 const previousRenderPlanner=renderPlanner;
 renderPlanner=function(){
+  const oldList=plannerRoot.querySelector('.focus-list');
+  const viewKey=JSON.stringify([focusTab,workspaceQuery,workspaceQuick]);
+  const keepPosition=oldList?.dataset.viewKey===viewKey;
+  const oldTop=keepPosition?oldList.scrollTop:0;
+  const pageX=window.scrollX,pageY=window.scrollY;
+  const expanded=new Map(keepPosition?[...oldList.querySelectorAll('[data-focus-group]')].map(g=>[g.dataset.focusGroup,g.open]):[]);
+  const anchor=keepPosition&&oldList.scrollHeight>oldList.clientHeight
+    ? [...oldList.querySelectorAll('[data-action-id]')].find(row=>row.getClientRects().length&&row.getBoundingClientRect().bottom>oldList.getBoundingClientRect().top):null;
+  const anchorId=anchor?.dataset.actionId;
+  const anchorOffset=anchor?anchor.getBoundingClientRect().top-oldList.getBoundingClientRect().top:0;
   previousRenderPlanner();
   const all=WE.focus(allJobs(),DATA.actions,plannerState,plannerItems());
   const shown=all.filter(t=>t.rid?workspaceMatch(jobById(t.rid)||{}):WE.matches({name:t.title,note:t.detail},workspaceQuery,workspaceQuick));
@@ -74,9 +92,16 @@ renderPlanner=function(){
   const head=plannerRoot.querySelector('.planner-head');
   head.innerHTML=`<div><div class="planner-eyebrow">TODAY'S FOCUS</div><h2>今日行动</h2><span class="sub">先处理紧急事项，再安排接下来的申请${workspaceActive()?' · 已应用搜索筛选':''}</span></div><div class="planner-actions"><span class="focus-total">${active.length}<small> 件待处理</small></span><button class="btn pri" data-planner="add" ${plannerReady?'':'disabled'}>＋ 添加待办</button></div>`;
   const groups=[['overdue','已逾期'],['today','今天'],['soon','未来 3 天']];
-  const row=t=>`<article class="action-row ${t.done?'done':''}"><div class="action-icon ${t.group}">${t.kind==='截止提醒'?'↗':t.kind==='笔试 / 面试'?'◷':'✓'}</div><div class="action-main"><div class="task-meta"><span class="kind">${esc(t.kind)}</span><time>${esc(t.undated?'待确认时间':t.date+(t.time?' '+t.time:''))}</time></div><strong>${esc(t.title)}</strong><p>${esc(t.detail||'')}</p><div class="focus-tools">${t.rid?`<button class="btn" data-detail="${esc(t.rid)}">岗位详情</button>`:''}${!t.done&&t.kind==='截止提醒'&&t.rid?`<button class="btn pri" data-apply="${esc(t.rid)}" data-apply-task="${esc(t.id)}" ${LIVE&&!saveInFlight?'':'disabled'}>标记已投递</button>`:''}${!t.done&&t.rid&&WE.links(jobById(t.rid)||{}).length?`<a class="btn" href="${esc(WE.links(jobById(t.rid))[0].url)}" target="_blank" rel="noopener noreferrer">${t.kind==='截止提醒'?'打开投递入口':'打开相关链接'} ↗</a>`:''}<button class="btn" data-focus-done="${esc(t.id)}" data-undone="${t.done?'1':'0'}" ${plannerReady&&!plannerBusy&&!(t.done&&t.snapshot&&t.kind==='截止提醒')?'':'disabled'}>${t.done&&t.snapshot&&t.kind==='截止提醒'?'已确认投递':t.done?'撤销完成':t.kind==='截止提醒'?'忽略此提醒':t.kind==='待补材料'?'标记已补充':'标记完成'}</button>${!t.done?`<button class="btn subtle" data-snooze="${esc(t.id)}">1 小时后提醒</button>`:''}${t.snoozeUntil>Date.now()?`<button class="btn" data-resume="${esc(t.id)}">现在处理</button>`:''}${t.id.startsWith('manual:')?`<button class="btn subtle" data-delete="${esc(t.id)}">删除</button>`:''}</div></div></article>`;
-  plannerRoot.querySelector('.focus-list').innerHTML=`<div class="focus-tabs">${[['active','待处理',active.length],['done','已完成',shown.filter(t=>t.done).length],['later','稍后提醒',shown.filter(t=>!t.done&&t.snoozeUntil>Date.now()).length]].map(([id,label,count])=>`<button class="btn ${focusTab===id?'selected':''}" data-focus-tab="${id}">${label} <span>${count}</span></button>`).join('')}</div>${groups.map(([id,label])=>{const list=visible.filter(t=>t.group===id);return list.length?`<details class="focus-group ${id}" ${id==='soon'?'':'open'}><summary>${label}<span>${list.length} 项</span></summary>${list.map(row).join('')}</details>`:'';}).join('')||'<div class="planner-empty">这里暂时没有事项。可以添加下一步计划。</div>'}`;
+  const row=t=>`<article data-action-id="${esc(t.id)}" class="action-row ${t.done?'done':''}"><div class="action-icon ${t.group}">${t.kind==='截止提醒'?'↗':t.kind==='笔试 / 面试'?'◷':'✓'}</div><div class="action-main"><div class="task-meta"><span class="kind">${esc(t.kind)}</span><time>${esc(t.undated?'待确认时间':t.date+(t.time?' '+t.time:''))}</time></div><strong>${esc(t.title)}</strong><p>${esc(t.detail||'')}</p><div class="focus-tools">${t.rid?`<button class="btn" data-detail="${esc(t.rid)}">岗位详情</button>`:''}${!t.done&&t.kind==='截止提醒'&&t.rid?`<button class="btn pri" data-apply="${esc(t.rid)}" data-apply-task="${esc(t.id)}" ${LIVE&&!saveInFlight?'':'disabled'}>标记已投递</button>`:''}${!t.done&&t.rid?actionLinks(jobById(t.rid)||{}).map(l=>`<a class="btn" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.label)} ↗</a>`).join(''):''}<button class="btn" data-focus-done="${esc(t.id)}" data-undone="${t.done?'1':'0'}" ${plannerReady&&!plannerBusy&&!(t.done&&t.snapshot&&t.kind==='截止提醒')?'':'disabled'}>${t.done&&t.snapshot&&t.kind==='截止提醒'?'已确认投递':t.done?'撤销完成':t.kind==='截止提醒'?'忽略此提醒':t.kind==='待补材料'?'标记已补充':'标记完成'}</button>${!t.done?`<button class="btn subtle" data-snooze="${esc(t.id)}">1 小时后提醒</button>`:''}${t.snoozeUntil>Date.now()?`<button class="btn" data-resume="${esc(t.id)}">现在处理</button>`:''}${t.id.startsWith('manual:')?`<button class="btn subtle" data-delete="${esc(t.id)}">删除</button>`:''}</div></div></article>`;
+  plannerRoot.querySelector('.focus-list').innerHTML=`<div class="focus-tabs">${[['active','待处理',active.length],['done','已完成',shown.filter(t=>t.done).length],['later','稍后提醒',shown.filter(t=>!t.done&&t.snoozeUntil>Date.now()).length]].map(([id,label,count])=>`<button class="btn ${focusTab===id?'selected':''}" data-focus-tab="${id}">${label} <span>${count}</span></button>`).join('')}</div>${groups.map(([id,label])=>{const list=visible.filter(t=>t.group===id);return list.length?`<details data-focus-group="${id}" class="focus-group ${id}" ${id==='soon'?'':'open'}><summary>${label}<span>${list.length} 项</span></summary>${list.map(row).join('')}</details>`:'';}).join('')||'<div class="planner-empty">这里暂时没有事项。可以添加下一步计划。</div>'}`;
+  const list=plannerRoot.querySelector('.focus-list');
+  list.dataset.viewKey=viewKey;
+  list.querySelectorAll('[data-focus-group]').forEach(g=>{if(expanded.has(g.dataset.focusGroup))g.open=expanded.get(g.dataset.focusGroup);});
+  list.scrollTop=oldTop;
+  const restoredAnchor=anchorId?[...list.querySelectorAll('[data-action-id]')].find(row=>row.dataset.actionId===anchorId):null;
+  if(restoredAnchor?.getClientRects().length) list.scrollTop+=restoredAnchor.getBoundingClientRect().top-list.getBoundingClientRect().top-anchorOffset;
   renderCalendar();
+  window.scrollTo({left:pageX,top:pageY,behavior:'instant'});
 };
 plannerRoot.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
@@ -99,7 +124,7 @@ async function commitWorkspace(operations){
   if(saveInFlight||!LIVE)return;
   saveInFlight=true;saveRevision++;
   const failed=[],warnings=[];let successful=0;
-  const progress=()=>{saveNotice.textContent=`正在保存 ${successful+failed.length} / ${operations.length} 条岗位修改…`;};progress();
+  const progress=()=>{scheduleSaveNoticeDismiss(false);saveNotice.textContent=`正在保存 ${successful+failed.length} / ${operations.length} 条岗位修改…`;};progress();
   try{
     for(const op of operations){
       try{
@@ -115,6 +140,7 @@ async function commitWorkspace(operations){
     }
   }finally{saveInFlight=false;saveRevision++;renderAll();}
   saveNotice.innerHTML=`<div class="msg ${failed.length?'warn':'ok'}">已保存 ${successful} / ${operations.length} 条。${warnings.length?esc([...new Set(warnings)].join('；')):''}${failed.length?`<div>以下 ${failed.length} 条保存结果未确认，请核对飞书后重试：</div>${failed.map(op=>`<div>${esc(jobById(op.id)?.name||op.id)}：${esc(op.error)}</div>`).join('')}<button class="btn" id="retry-workspace">重试未确认项</button>`:''}</div>`;
+  scheduleSaveNoticeDismiss(!failed.length&&!warnings.length);
   if($('retry-workspace'))$('retry-workspace').onclick=()=>commitWorkspace(failed);
 }
 function openBatch(){

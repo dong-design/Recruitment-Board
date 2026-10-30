@@ -507,12 +507,22 @@ function renderSync(){
 function cloudSessionError(error){
   return /session.*(invalid|expired|another client)|invalid.*session|unauthorized|invalid_grant|jwt.*expired|401/i.test(et(error));
 }
+function changeValue(field, value){
+  if (value == null || value === '' || (Array.isArray(value) && !value.length)) return '未填写';
+  if (typeof value === 'number' && /日期|截止日/.test(field)) return new Date(value).toLocaleDateString('sv-SE', {timeZone:'Asia/Shanghai'});
+  return Array.isArray(value) ? value.join('、') : typeof value === 'object' ? JSON.stringify(value) : String(value);
+}
 function logRows(rows, local = false){
   return rows.map(l => {
-    const details = local ? Object.entries(l.fields || {}).map(([key,value]) => `${key}：${Array.isArray(value) ? (value.join('、') || '已清空') : (value == null || value === '' ? '已清空' : (typeof value === 'number' && /日期|截止日/.test(key) ? new Date(value).toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' }) : value))}`).join(' · ') : `${l.old_value || '—'} → ${l.new_value || '—'}`;
+    let details;
+    if (local && Array.isArray(l.changes)) {
+      details = l.changes.length ? l.changes.map(c => `<div class="field-change"><b>${esc(c.field)}</b><span class="old-value">${esc(c.beforeKnown ? changeValue(c.field,c.before) : '旧值未记录')}</span><span aria-hidden="true">→</span><strong>${esc(changeValue(c.field,c.after))}</strong></div>`).join('') : '<div class="sub">本次提交的字段与保存前一致，无字段变化。</div>';
+    } else if (local) {
+      details = '<div class="sub">历史记录未保存旧值，以下为当次提交内容：</div>' + Object.entries(l.fields || {}).map(([key,value]) => `<div class="field-change"><b>${esc(key)}</b><strong>${esc(changeValue(key,value))}</strong></div>`).join('');
+    } else details = `<p>${esc(l.old_value || '旧值未记录')} → ${esc(l.new_value || '未填写')}</p>`;
     const parsed = new Date(l.created_at || '');
-    const time = Number.isNaN(parsed.getTime()) ? '' : parsed.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
-    return `<article class="change-entry"><div class="change-top"><strong>${esc(l.name || l.rid || '岗位改动')}</strong><span class="pill ${l.synced ? 'e' : 'w'}">${l.synced ? '已同步飞书' : '待回写'}</span><time>${esc(time)}</time></div><div class="sub">${esc(l.field || '')}</div><p>${esc(details)}</p></article>`;
+    const time = Number.isNaN(parsed.getTime()) ? '' : parsed.toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',hour12:false});
+    return `<article class="change-entry"><div class="change-top"><strong>${esc(l.name || l.rid || '岗位改动')}</strong><span class="pill ${l.synced ? 'e' : 'w'}">${l.synced ? '已同步飞书' : '待回写'}</span><time>${esc(time)}</time></div>${details}</article>`;
   }).join('');
 }
 async function loadLogs(){

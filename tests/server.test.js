@@ -23,6 +23,7 @@ global.fetch = async (url, options = {}) => {
     Object.assign(record.fields, fields);
     return { json: async () => ({ code: 0, data: { record } }) };
   }
+  if (/\/records\/rec[^/?]+$/.test(url)) return {json: async () => ({code:0,data:{record:JSON.parse(JSON.stringify(record))}})};
   return { json: async () => ({ code: 0, data: { items: [record] } }) };
 };
 const auth = 'Basic ' + Buffer.from('owner:' + process.env.BOARD_PASSWORD).toString('base64');
@@ -102,4 +103,15 @@ test('configured public origin survives proxy host rewriting; other origins rema
   for (const origin of ['https://evil.invalid', 'https://board.example.com.evil.invalid', 'null']) {
     assert.equal((await request('/api/pull', { headers: { Origin: origin, 'X-Forwarded-Host': 'board.example.com' } })).status, 403);
   }
+});
+
+test('audit logs record changed fields with actual previous values, including explicit clearing', async () => {
+  record.fields['进展'] = ['笔试','一面'];
+  record.fields['投递'] = '已投递';
+  const res = await sync({rid:'recTest1',status:'已投递',progress:[]});
+  assert.equal(res.status,200);
+  const result = await (await request('/api/logs')).json();
+  const changes = result.logs[0].changes;
+  assert.equal(changes.length,1);
+  assert.deepEqual(changes[0],{field:'进展',before:['笔试','一面'],after:[],beforeKnown:true});
 });

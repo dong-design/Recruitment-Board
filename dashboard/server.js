@@ -226,12 +226,20 @@ function buildFields(b) {
 }
 
 async function writeRecord(rid, fields) {
+  let before = null;
+  try {
+    const previous = await api(`/bitable/v1/apps/${APP_TOKEN}/tables/${TABLE_ID}/records/${rid}`);
+    if (previous.code === 0 && previous.data?.record?.fields) before = previous.data.record.fields;
+  } catch (_) { /* A missing audit baseline must not prevent saving. */ }
   const j = await api(`/bitable/v1/apps/${APP_TOKEN}/tables/${TABLE_ID}/records/${rid}`, {
     method: 'PUT',
     body: JSON.stringify({ fields }),
   });
   if (j.code !== 0) throw new Error('写入飞书失败: ' + (j.msg || j.code));
-  return j.data;
+  const canonical = value => Array.isArray(value) ? [...value].sort() : value == null || value === '' ? null : value;
+  const changes = Object.entries(fields).filter(([key,value]) => !before || JSON.stringify(canonical(before[key])) !== JSON.stringify(canonical(value)))
+    .map(([field,after]) => ({ field, before: before ? (before[field] ?? null) : null, after, beforeKnown: !!before }));
+  return { ...j.data, changes };
 }
 
 function send(res, code, obj) {
@@ -328,7 +336,7 @@ function createServer(options = {}) {
         catch (e) { return send(res, 400, { ok: false, error: e.message }); }
         const result = await enqueueWrite(body.rid, fields);
         let warning = '';
-        try { store.appendLog({ rid: body.rid, name: result?.record?.fields?.['公司名称'] || body.rid, field: '岗位状态 / 时间', fields }); }
+        try { store.appendLog({ rid: body.rid, name: result?.record?.fields?.['公司名称'] || body.rid, field: '岗位状态 / 时间', fields, changes: result.changes }); }
         catch (_) { warning = '飞书已保存，但本地改动记录写入失败'; }
         return send(res, 200, { ok: true, rid: body.rid, warning });
       } catch (e) { return send(res, 502, { ok: false, error: e.message }); }
