@@ -6,31 +6,45 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(BASE_DIR, "feishu_records.ndjson")
 OUT_DIR = os.path.join(BASE_DIR, "dashboard")
 OUT = os.path.join(OUT_DIR, "index.html")
-FEISHU_URL = ""   # 从 config.json 的 feishuUrl 读取
+FEISHU_URL = "https://ocn31xyh2it7.feishu.cn/base/JTtqb02cFa36nyseT4ucHKBXn0c?table=tblb1z7ZnPNJTFVj&view=vewSk6uK2I"
 
-# 云服务 publicConfig —— 由 WorkBuddy 云服务下发，可直接放在前端
-CLOUD_CONFIG = {}   # 从 config.json 的 cloud 读取
+# 云服务 publicConfig —— 由 workbuddy_cloud_service activate 返回，可直接下发到前端
+CLOUD_CONFIG = {
+    "endpoint": "https://campus-recruit-board-76828.app.workbuddy.host",
+    "oauthRelayBaseUrl": "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
+    "publishableKey": "wbpk_IwA7fp2zTePL6RbJvZ5ODR_D1Mi4qWLBNzWPWxJSEoaV1tMpQ8vT2BS",
+}
 
-# 定时任务中的未来动作节点
-ACTIONS = []   # 从 actions.json 读取
-
-# ---------- 配置加载 ----------
-_cfg_path = os.path.join(BASE_DIR, "config.json")
-_CFG = {}
-if os.path.exists(_cfg_path):
-    with open(_cfg_path, encoding="utf-8") as f:
-        _CFG = json.load(f)
-
-FEISHU_URL = _CFG.get("feishuUrl", "")
-CLOUD_CONFIG = _CFG.get("cloud") or {}
-# 没有 config.json 时用 sample 示例数据，方便 clone 下来直接看效果
-SRC = os.path.join(BASE_DIR, _CFG.get("source")
-                   or ("sample/feishu_records.ndjson" if not _CFG else "feishu_records.ndjson"))
-
-_act_path = os.path.join(BASE_DIR, "actions.json")
-if os.path.exists(_act_path):
-    with open(_act_path, encoding="utf-8") as f:
-        ACTIONS = [(it["name"], it["datetime"], it.get("tip", "")) for it in json.load(f)]
+# 定时任务中的未来动作节点（由 automation 列表同步）
+ACTIONS = [
+    ("中信银行总行 AI 面试", "2026-10-30T19:00", "登录时段 19:00-19:30，20:30 前作答完成；登录后勿离开界面"),
+    ("建行笔试考点预约截止", "2026-10-30T12:00", "10-28 已开放，逾期系统默认分配考点"),
+    ("国家烟草网申收口", "2026-10-30T20:00", "10-30 截止·限报 1 岗且不可改，先定岗再提交"),
+    ("中国融通集团网申收口", "2026-10-30T20:00", "10-30 截止·机会型，2027 届入口待核实"),
+    ("贵州烟草报名收口", "2026-10-30T20:00", "10-30 截止"),
+    ("瑞众人寿保险网申收口", "2026-10-30T20:00", "10-31 截止·限投 2 岗，总部北京·信息科技类"),
+    ("进出口银行网申收口", "2026-10-30T20:00", "10-31 截止"),
+    ("民生银行统一笔试", "2026-10-30T19:00", "19:00-21:30，提前做设备/环境测试（与中信 AI 面试撞车，见备注）"),
+    ("建行笔试前一天准备", "2026-10-30T20:00", "10-31 14:30 笔试，考点预约 12:00 截止 + 打印准考证"),
+    ("五矿 + 五矿资本 + 国网信通网申收口", "2026-10-30T20:00", "10-31 截止"),
+    ("微软 + 美团网申", "2026-10-30T20:00", "10-31 截止"),
+    ("华能 + 邮政 + 银河证券网申收口", "2026-10-30T20:00", "10-31 截止"),
+    ("华泰证券网申收口", "2026-10-31T20:00", "11-01 24:00 截止，北京科技岗需核实"),
+    ("工行笔试当天", "2026-10-31T09:30", "线下统一考试"),
+    ("建行笔试当天", "2026-10-31T14:30", "信息技术类·北京，4 单元单独计时不可返回"),
+    ("北京航天万源网申", "2026-10-31T20:00", "10-31 截止·航天科技一院子公司，北京可落户"),
+    ("国家管网统一在线笔试", "2026-11-01T14:00", "闭卷 14:00-16:00，行测 + AI/大数据；等正式链接"),
+    ("中海油网申截止", "2026-11-01T20:00", "11-07 在线笔试"),
+    ("中国铁塔统一笔试", "2026-11-01T10:00", "线上统一笔试（面试 11-02~11-30）"),
+    ("快手视频面试", "2026-11-02T15:00", "AI 全栈开发·北京，15:00-16:00"),
+    ("中国南方电网网申截止", "2026-11-02T20:00", "11-02 截止，统一笔试约 11 月下旬"),
+    ("京能数字产业网申", "2026-11-02T20:00", "11-05 截止"),
+    ("中国船舶集团网申收口", "2026-11-06T20:00", "11-07 截止·正式批，军工央企"),
+    ("中海油在线笔试", "2026-11-07T10:00", "在线笔试；网申 11-01 截止"),
+    ("进出口银行网申截止", "2026-11-10T20:00", "约 11-12 止"),
+    ("国家电网一批网申开启", "2026-11-12T10:00", "主战场"),
+    ("中储粮网申截止", "2026-11-14T20:00", "约 11-20 止"),
+]
 
 
 def load():
@@ -75,6 +89,8 @@ def build():
             "note": r.get("备注") or "",
         })
         subs.append({
+            "id": r["record_id"], "parentId": pid, "kids": [],
+            "hasDl": bool(norm_date(r.get("报名截止日"))), "apply": norm_date(r.get("投递日期")),
             "name": r.get("公司名称") or "",
             "parent": parent.get("公司名称") or "",
             "type": (r.get("单位类型") or [""])[0],
@@ -252,7 +268,7 @@ body.modal-open{overflow:hidden}
 <div class="wrap">
   <div class="card" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
     <div>
-      <h1>秋招进度看板</h1>
+      <div class="planner-eyebrow">RECRUITMENT WORKSPACE</div><h1>把握每一次机会</h1>
       <div class="sub" id="meta"></div>
     </div>
     <div class="abar">
@@ -260,7 +276,7 @@ body.modal-open{overflow:hidden}
       <span id="synctext"></span>
       <span class="sub" id="synctime"></span>
       <button class="btn" id="btn-refresh">刷新</button>
-      <button class="btn pri" id="btn-login">登录后可改状态</button>
+      <button class="btn pri" id="btn-login">登录云日志</button>
       <button class="btn hide" id="btn-out">退出</button>
       <a class="sub" id="src" href="#" target="_blank">飞书数据源 ↗</a>
     </div>
@@ -270,14 +286,14 @@ body.modal-open{overflow:hidden}
 
   <div class="kpis" id="kpis"></div>
 
-  <div class="card"><h2>注意哦 · 倒计时</h2><div id="dl"></div></div>
+  <div class="card"><h2>即将到期</h2><div id="dl"></div></div>
 
   <div class="card"><h2>未来 7 天</h2><div class="tl" id="tl"></div></div>
 
   <div class="tabs">
     <div class="tab on" data-v="board">投递看板</div>
     <div class="tab" data-v="table">明细表格</div>
-    <div class="tab" data-v="sub">子岗位</div>
+    <div class="tab" data-v="sub">集团 / 岗位</div>
     <div class="tab" data-v="act">近期动作</div>
     <div class="tab" data-v="log">我的改动</div>
   </div>
@@ -345,6 +361,7 @@ const dayDiff = d => { if(!d) return null; const t=new Date(d+'T00:00:00'); retu
 const $ = id => document.getElementById(id);
 const et = e => (e && (e.message || e.error_description)) || '未知错误';
 
+let authRevision = 0;
 let cloud = null, session = null, OVERRIDES = {}, LOGS = [], PENDING = 0, DL_ALL = false;
 let R = DATA.records;
 let SUBS = DATA.subs || [];
@@ -360,22 +377,57 @@ function setCloud(text, kind){
   $('ctext').textContent = text;
 }
 
-function initCloud(){
-  if (!CLOUD || !CLOUD.publishableKey) {
-    setCloud('未配置云服务 · 只读', 'off');
-    cmsg('当前没有配置云服务，页面为只读快照。配置 config.json 后可开启登录与保存。', 'warn');
-    return;
+// The SDK owns tokens and refresh; namespace its persistence by application endpoint.
+function cloudStorage(){
+  const prefix = 'recruit.auth:' + new URL(CLOUD.endpoint || location.origin).origin + ':';
+  try {
+    localStorage.setItem(prefix + 'probe', '1'); localStorage.removeItem(prefix + 'probe');
+    return {
+      getItem: key => {
+        const saved = localStorage.getItem(prefix + key);
+        if (saved) return saved;
+        // Migrate this application's pre-upgrade SDK session without forcing a new login.
+        const legacy = key === 'workbuddy-cloud.session.' + CLOUD.publishableKey ? localStorage.getItem(key) : null;
+        if (legacy) localStorage.setItem(prefix + key, legacy);
+        return legacy;
+      },
+      setItem: (key,value) => localStorage.setItem(prefix + key,value),
+      removeItem: key => { localStorage.removeItem(prefix + key); if (key === 'workbuddy-cloud.session.' + CLOUD.publishableKey) localStorage.removeItem(key); }
+    };
+  } catch (_) {
+    cmsg('浏览器禁止了本地存储，本次登录无法跨刷新保留。请允许此站点存储后重新登录。', 'warn');
+    return undefined;
   }
+}
+function refreshEditAccess(){
+  if (!currentRid || !$('mask').classList.contains('on') || !$('editzone')) return;
+  const record = V().find(r => r.id === currentRid);
+  if (record) renderEditAccess(record);
+}
+function renderEditAccess(r){
+  if (LIVE && typeof openPlannerJob === 'function') {
+    $('editzone').innerHTML = `<div class="form-footnote">已连接看板服务，可直接编辑并保存到飞书。</div><button class="btn pri" style="margin-top:12px" onclick="openPlannerJob('${r.id}')">编辑岗位状态与时间</button>`;
+  } else if (session) $('editzone').innerHTML = editForm(r);
+  else $('editzone').innerHTML = `<div class="msg warn">当前未连接实时服务，暂时不能直接保存到飞书。${cloud ? '也可登录云日志使用云端队列。' : '请启动看板服务后刷新。'}</div>${cloud ? '<button class="btn" onclick="openLogin()">登录云日志</button>' : ''}`;
+}
+function initCloud(){
   if (typeof WorkBuddyCloud === 'undefined' || typeof WorkBuddyCloud.createWorkBuddyCloud !== 'function') {
-    setCloud('云服务未加载（只读快照）', 'warn');
-    cmsg('云服务组件未能加载，当前页面是本地快照，不能保存修改。请检查网络后刷新。', 'warn');
+    setCloud('云日志暂未加载', 'warn');
+    cmsg('云日志组件暂未加载，不影响已连接的看板服务保存岗位。', 'warn');
     return;
   }
   try {
     cloud = WorkBuddyCloud.createWorkBuddyCloud({
       endpoint: CLOUD.endpoint,
       oauthRelayBaseUrl: CLOUD.oauthRelayBaseUrl,
-      publishableKey: CLOUD.publishableKey
+      publishableKey: CLOUD.publishableKey,
+      storage: cloudStorage()
+    });
+    cloud.auth.onAuthStateChange((event, value) => {
+      if (event === 'SIGNED_OUT') { authRevision++; session = null; OVERRIDES = {}; PENDING = 0; }
+      // SDK events only indicate stored credentials, not server-verified identity.
+      // Defer initial SDK callback until the page's state declarations have run.
+      queueMicrotask(() => { renderAuth(); refreshEditAccess(); });
     });
   } catch (e) {
     setCloud('云服务初始化失败', 'warn');
@@ -383,14 +435,35 @@ function initCloud(){
   }
 }
 
+async function verifyCloudSession(candidate){
+  const revision = ++authRevision;
+  session = null;
+  renderAuth();
+  if (!candidate) return null;
+  const identity = await cloud.auth.getUser();
+  if (identity.error) throw identity.error;
+  if (!identity.data) throw new Error('session invalid: missing user');
+  if (revision !== authRevision) throw new Error('session changed during verification');
+  session = Object.assign({}, candidate, { user: identity.data });
+  return session;
+}
+
 async function restore(){
   if (!cloud) return;
-  const { data, error } = await cloud.auth.getSession();
-  if (error) { setCloud('登录状态异常', 'warn'); cmsg('读取登录状态失败：' + et(error), 'warn'); renderAuth(); return; }
-  session = data || null;
-  if (session) await loadOverrides();
+  try {
+    const { data, error } = await cloud.auth.getSession();
+    if (error) throw error;
+    await verifyCloudSession(data);
+    if (session) {
+      try { await loadOverrides(); }
+      catch (_) { cmsg('身份校验已通过，云端改动暂时无法读取，请稍后重试。', 'warn'); }
+    }
+  } catch (error) {
+    session = null;
+    cmsg(cloudSessionError(error) ? '云端身份校验未通过，未恢复登录。若刚登录仍出现此错误，需要修复平台认证服务；本地看板与飞书同步仍可使用。' : '云日志暂时无法连接，可稍后重试。', 'warn');
+  }
   renderAuth();
-  if (booted) renderAll();   // 首屏还没拿到实时数据时不要画快照，否则会闪旧数字
+  if (booted) renderAll();
 }
 
 function renderAuth(){
@@ -399,21 +472,18 @@ function renderAuth(){
     setCloud('已登录 · ' + (u.name || '我的账号'), 'ok');
     $('btn-login').classList.add('hide');
     $('btn-out').classList.remove('hide');
-  } else if (!cloud) {
-    setCloud('未配置云服务 · 只读', 'off');
-    $('btn-login').classList.add('hide');
-    $('btn-out').classList.add('hide');
   } else {
-    setCloud('未登录 · 只读', 'off');
+    setCloud('云日志未登录', 'off');
     $('btn-login').classList.remove('hide');
     $('btn-out').classList.add('hide');
   }
   renderSync();
+  refreshEditAccess();
 }
 
 async function loadOverrides(){
   const { data, error } = await cloud.database.from('job_overrides').select('*');
-  if (error) { cmsg('读取云端改动失败：' + et(error) + '（页面仍显示本地快照）', 'warn'); return; }
+  if (error) { cmsg(cloudSessionError(error) ? '身份校验已通过，但云数据库拒绝访问，需要检查数据库授权。可继续通过看板编辑岗位。' : '云端改动暂时无法读取，请稍后重试。', 'warn'); return; }
   OVERRIDES = {};
   (data || []).forEach(o => { OVERRIDES[o.rid] = o; });
   const p = await cloud.database.from('job_log').select('*', { count: 'exact', head: true }).eq('synced', false);
@@ -434,20 +504,48 @@ function renderSync(){
   }
 }
 
+function cloudSessionError(error){
+  return /session.*(invalid|expired|another client)|invalid.*session|unauthorized|invalid_grant|jwt.*expired|401/i.test(et(error));
+}
+function logRows(rows, local = false){
+  return rows.map(l => {
+    const details = local ? Object.entries(l.fields || {}).map(([key,value]) => `${key}：${Array.isArray(value) ? (value.join('、') || '已清空') : (value == null || value === '' ? '已清空' : (typeof value === 'number' && /日期|截止日/.test(key) ? new Date(value).toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' }) : value))}`).join(' · ') : `${l.old_value || '—'} → ${l.new_value || '—'}`;
+    const parsed = new Date(l.created_at || '');
+    const time = Number.isNaN(parsed.getTime()) ? '' : parsed.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+    return `<article class="change-entry"><div class="change-top"><strong>${esc(l.name || l.rid || '岗位改动')}</strong><span class="pill ${l.synced ? 'e' : 'w'}">${l.synced ? '已同步飞书' : '待回写'}</span><time>${esc(time)}</time></div><div class="sub">${esc(l.field || '')}</div><p>${esc(details)}</p></article>`;
+  }).join('');
+}
 async function loadLogs(){
-  if (!session) { $('logs').innerHTML = '<div class="sub">登录后查看你在看板上做过的改动。</div>'; return; }
-  const { data, error } = await cloud.database.from('job_log').select('*').order('created_at', { ascending: false }).limit(50);
-  if (error) { $('logs').innerHTML = `<div class="msg err">读取改动记录失败：${esc(et(error))}</div>`; return; }
-  const rows = data || [];
-  const head = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <h2 style="margin:0">我的改动（最近 ${rows.length} 条）</h2>
-      ${PENDING > 0 ? `<span class="pill w">${PENDING} 条待回写飞书</span>` : `<span class="pill e">已全部同步飞书</span>`}
-    </div>
-    <div class="sub" style="margin-bottom:10px">看板改动先存云端，再由定时任务回写飞书多维表格（每天 07:30，以及每 3 小时一次）。想立刻同步，直接跟 WorkBuddy 说「同步飞书」。</div>`;
-  if (!rows.length) { $('logs').innerHTML = head + '<div class="sub">还没有改动记录。在看板上改一次状态就会出现在这里。</div>'; return; }
-  $('logs').innerHTML = head + rows.map(l =>
-    `<div class="act"><span class="badge b-gry">${esc((l.created_at||'').slice(5,16))}</span><span class="nm">${esc(l.name||'')}</span><span class="sub">${esc(l.field||'')}</span>${l.synced?'<span class="pill e">已同步</span>':'<span class="pill w">待回写</span>'}<span class="dt">${esc(l.old_value||'—')} → ${esc(l.new_value||'—')}</span></div>`
-  ).join('');
+  $('logs').innerHTML = '<div class="sub">正在读取改动记录…</div>';
+  let localRows = [], localWarning = '', cloudRows = [], cloudWarning = '';
+  try {
+    const response = await fetch('/api/logs' + APIQ(), { cache: 'no-store', signal: AbortSignal.timeout(15000) });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error('unavailable');
+    localRows = result.logs || [];
+  } catch (_) { localWarning = '本地改动记录暂时无法加载，请确认看板服务已更新并运行。'; }
+  if (cloud && session) {
+    let authChecked = false;
+    try {
+      const restored = await cloud.auth.getSession();
+      if (restored.error) throw restored.error;
+      if (!restored.data) throw new Error('session expired');
+      await verifyCloudSession(restored.data);
+      authChecked = true;
+      const result = await cloud.database.from('job_log').select('*').order('created_at', { ascending: false }).limit(50);
+      if (result.error) throw result.error;
+      cloudRows = result.data || [];
+    } catch (error) {
+      if (cloudSessionError(error) && !authChecked) { session = null; renderAuth(); cloudWarning = '云日志登录已失效或与当前客户端不匹配，请重新登录查看历史云日志。本地记录和飞书数据不受影响。'; }
+      else cloudWarning = '登录会话已保留，但历史云日志暂不可用。可能是云数据库权限或会话归属不匹配，本地记录和岗位编辑不受影响。';
+    }
+  }
+  $('logs').innerHTML = `<div class="change-heading"><div><h2>我的改动</h2><div class="sub">本地保存记录 · 最近 ${localRows.length} 条</div></div><button class="btn" onclick="loadLogs()">刷新记录</button></div>
+    ${localWarning ? `<div class="msg warn">${esc(localWarning)}</div>` : ''}
+    ${localRows.length ? logRows(localRows, true) : '<div class="planner-empty">暂无本地改动记录。此版本起成功保存到飞书的操作会自动记录在这里。</div>'}
+    <div class="sec"><h3>历史云日志</h3>${cloudWarning ? `<div class="msg warn">${esc(cloudWarning)}</div>` : ''}
+    ${cloudRows.length ? logRows(cloudRows) : '<div class="sub">尚无可显示的历史云日志。</div>'}
+    ${cloud && (!session || cloudWarning) ? '<button class="btn" onclick="openLogin()">重新登录云日志</button>' : ''}</div>`;
 }
 
 const view = r => {
@@ -472,12 +570,12 @@ const F = () => ({
   city: ($('f-city') || {}).value || '',
   status: ($('f-status') || {}).value || '',
 });
-const isFiltered = () => { const f = F(); return !!(f.type || f.city || f.status); };
+const isFiltered = () => { const f = F(); return !!(f.type || f.city || f.status || (typeof workspaceActive === 'function' && workspaceActive())); };
 const filteredV = () => {
   const f = F();
   return V().filter(r => (!f.type || r.type === f.type)
     && (!f.city || (r.city || []).includes(f.city))
-    && (!f.status || r.status === f.status));
+    && (!f.status || r.status === f.status) && (typeof workspaceMatch !== 'function' || workspaceMatch(r)));
 };
 
 function initFilters(){
@@ -528,6 +626,7 @@ async function pullLive(){
     SUBS = j.subs || [];
     LAST_PULL = new Date();
     LIVE = true;
+    refreshEditAccess();
     renderAll();
     return true;
   } catch (e) { return false; }
@@ -604,7 +703,7 @@ function renderAll(){
   $('cols').innerHTML = [0,1,2,3].map(i => {
     const list = shown.filter(r => bucket(r) === i).sort(sortFn);
     const body = i === 0 ? grouped(list) : list.map(card).join('');
-    return `<div class="col"><h3><span>${NAMES[i]}</span><span class="sub">${list.length}</span></h3><div class="list">${body || '<div class="sub">暂无</div>'}</div></div>`;
+    return `<div class="col stage-${i}"><h3 class="board-heading"><span class="board-label"><i class="board-dot"></i>${NAMES[i]}</span><span class="board-count">${list.length}</span></h3><div class="list">${body || '<div class="sub">暂无</div>'}</div></div>`;
   }).join('');
 
   $('acts').innerHTML = '<h2>近期动作节点</h2>' + DATA.actions.map(a => {
@@ -614,6 +713,7 @@ function renderAll(){
   }).join('');
   drawTable($('q').value);
   drawSubs($('qs').value);
+  if (typeof renderPlanner === 'function') renderPlanner();
 }
 
 // Use the exact same list as the seven-day counts, including active filters.
@@ -701,9 +801,7 @@ function openModal(r0){
     ${r.kids.length?`<div class="sec"><h2>子记录 ${r.kids.length}</h2>`+r.kids.map(k=>`<div class="kid"><b>${esc(k.name)}</b> <span class="sub">${esc(k.status)}</span>${k.post?'<br>'+esc(k.post):''}</div>`).join('')+`</div>`:''}
     <div class="sec" id="editzone"></div>
   `;
-  $('editzone').innerHTML = canEdit ? editForm(r) :
-    `<div class="msg warn">当前未登录，页面显示的是飞书快照（只读）。登录后可以直接在这里改状态：改动先存云端并立刻在本页生效，再自动回写飞书（每 3 小时一次 + 每日 07:30）。</div>
-     <button class="btn pri" onclick="openLogin()">立即登录</button>`;
+  renderEditAccess(r);
   $('mask').classList.add('on');
   document.body.classList.add('modal-open');
   $('modal').scrollTop = 0;
@@ -847,13 +945,13 @@ async function resetOverride(id){
 
 let currentRid = null;
 $('cols').onclick = e => { const el = e.target.closest('.it'); if (!el) return; currentRid = el.dataset.id; const r = view(R.find(x => x.id === currentRid)); if (r) openModal(r); };
-function closeM(){ $('mask').classList.remove('on'); document.body.classList.remove('modal-open'); }
+function closeM(){ if (window.closeDatePicker) window.closeDatePicker(); $('mask').classList.remove('on'); document.body.classList.remove('modal-open'); }
 $('mask').onclick = e => { if (e.target.id === 'mask') closeM(); };
 
 const tb = $('tb');
 function drawTable(kw){
   const k = (kw||'').trim().toLowerCase();
-  const list = V().filter(r => !k || (r.name+r.post+r.type+r.status+(r.note||'')+r.progress.join('')).toLowerCase().includes(k));
+  const list = V().filter(r => typeof workspaceMatch !== 'function' || workspaceMatch(r)).filter(r => !k || (r.name+r.post+r.type+r.status+(r.note||'')+r.progress.join('')).toLowerCase().includes(k));
   tb.innerHTML = `<thead><tr><th>公司</th><th>类型</th><th>岗位</th><th>状态</th><th>进展</th><th>关键日期</th><th>链接</th></tr></thead><tbody>` +
     list.map(r => `<tr data-id="${r.id}" style="cursor:pointer"><td><b>${esc(r.name)}</b>${r.edited?' <span class="pill c">已改</span>':''}${r.kids.length?` <span class="sub">+${r.kids.length}</span>`:''}</td><td>${esc(r.type||'')}</td><td style="max-width:220px">${esc((r.post||'').slice(0,60))}</td><td>${esc(r.status)}</td><td>${(r.progress||[]).join(' ')||'—'}</td><td>${esc(r.key||'—')}</td><td>${r.link?`<a href="${esc(r.link)}" target="_blank">打开</a>`:'—'}</td></tr>`).join('') +
     `</tbody>`;
@@ -864,7 +962,7 @@ tb.onclick = e => { const tr = e.target.closest('tr'); if (!tr || !tr.dataset.id
 const tsub = $('tsub');
 function drawSubs(kw){
   const k = (kw || '').trim().toLowerCase();
-  const list = (DATA.subs || []).filter(s => !k
+  const list = SUBS.map(view).filter(s => typeof workspaceMatch !== 'function' || workspaceMatch(s)).filter(s => !k
     || (s.name + s.parent + s.post + s.type + (s.note || '')).toLowerCase().includes(k));
   tsub.innerHTML = `<thead><tr><th>子岗位单位</th><th>所属集团</th><th>类型</th><th>城市</th><th>岗位</th><th>状态</th><th>进展</th><th>截止日</th></tr></thead><tbody>`
     + list.map(s => `<tr><td><b>${esc(s.name)}</b></td><td>${esc(s.parent)}</td><td>${esc(s.type || '')}</td><td>${esc((s.city || []).join('/') || '—')}</td><td style="max-width:200px">${esc((s.post || '').slice(0, 50)) || '—'}</td><td>${esc(s.status || '—')}</td><td>${(s.progress || []).join(' ') || '—'}</td><td>${esc(s.key || '—')}</td></tr>`).join('')
@@ -948,7 +1046,7 @@ async function signInPwd(){
   const { data, error } = await cloud.auth.signInWithPassword(isPhone ? { phone: acc, password: pwd } : { email: acc, password: pwd });
   btn.disabled = false; btn.textContent = '登录';
   if (error) { lmsg('账号或密码不正确'); return; }
-  afterLogin(data);
+  await afterLogin(data);
 }
 
 async function startReset(){
@@ -984,10 +1082,24 @@ function lmsg(t, ok){ const el = $('li-msg'); if (el) el.innerHTML = t ? `<div c
 function closeLogin(){ $('lmask').classList.remove('on'); document.body.classList.remove('modal-open'); }
 
 async function afterLogin(data){
+  try {
+    lmsg('正在向服务器校验登录身份…', true);
+    await verifyCloudSession(data);
+    if (!session) throw new Error('session invalid: missing credentials');
+  } catch (error) {
+    session = null; OVERRIDES = {}; PENDING = 0;
+    renderAuth(); renderAll();
+    lmsg(cloudSessionError(error)
+      ? '登录凭证未通过云端身份校验。登录接口签发了凭证，但认证服务拒绝使用，请联系平台检查认证配置。'
+      : '暂时无法完成身份校验，请检查网络后重试。');
+    return;
+  }
   pending = null; closeLogin();
-  session = data;
-  await loadOverrides(); renderAuth(); renderAll();
-  cmsg('登录成功，现在可以直接改状态了。', 'ok');
+  renderAuth(); refreshEditAccess();
+  cmsg('云日志身份校验成功。刷新页面时会自动恢复并校验会话。', 'ok');
+  try { await loadOverrides(); }
+  catch (_) { cmsg('身份校验已通过，云端改动暂时无法读取，请稍后重试。', 'warn'); }
+  renderAuth(); renderAll();
 }
 
 async function sendCode(){
@@ -1018,7 +1130,7 @@ async function submitCode(){
   const { data, error } = await cloud.auth.verifyOtp(payload);
   btn.disabled = false; btn.textContent = '登录 / 注册';
   if (error) { lmsg(et(error)); return; }
-  afterLogin(data);
+  await afterLogin(data);
 }
 
 $('btn-login').onclick = () => { if (!cloud) { cmsg('云服务未就绪，请刷新页面重试。', 'warn'); return; } openLogin(); };
@@ -1098,7 +1210,7 @@ function jumpTo(rid){
   setTimeout(() => el.classList.remove('flash'), 1800);
 }
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeM(); closeLogin(); }
+  if (e.key === 'Escape') { if (window.closeDatePicker && window.closeDatePicker(true)) return; closeM(); closeLogin(); }
 });
 </script>
 </body>
@@ -1117,8 +1229,20 @@ def main():
     data = build()
     cfg = dict(CLOUD_CONFIG)
     os.makedirs(OUT_DIR, exist_ok=True)
+    with open(os.path.join(OUT_DIR, ".planner-actions.json"), "w", encoding="utf-8") as f:
+        json.dump(data["actions"], f, ensure_ascii=False)
+    os.makedirs(OUT_DIR, exist_ok=True)
     html = TEMPLATE.replace("__DATA__", script_json(data))
     html = html.replace("__CLOUD__", script_json(cfg))
+    with open(os.path.join(OUT_DIR, "planner.css"), encoding="utf-8") as f:
+        html = html.replace("</style>", f.read() + "</style>", 1)
+    with open(os.path.join(OUT_DIR, "workspace.css"), encoding="utf-8") as f:
+        html = html.replace("</style>", f.read() + "</style>", 1)
+    extra = ""
+    for name in ["planner-engine.js", "planner.js", "date-picker.js", "workspace-engine.js", "workspace.js"]:
+        with open(os.path.join(OUT_DIR, name), encoding="utf-8") as f:
+            extra += "<script>" + f.read() + "</script>"
+    html = html.replace("</body>", extra + "</body>", 1)
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"written {OUT} ({len(html)/1024:.1f} KB), records={len(data['records'])}, actions={len(data['actions'])}")

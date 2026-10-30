@@ -11,7 +11,7 @@ const path = require('path');
 for (const file of [path.join(__dirname, '.env'), path.join(__dirname, '..', '.env'), path.join(__dirname, '..', '.feishu_app.env')]) {
   if (!fs.existsSync(file)) continue;
   for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const match = line.match(/^\s*(FEISHU_APP_ID|FEISHU_APP_SECRET|FEISHU_APP_TOKEN|FEISHU_TABLE_ID|BOARD_USERNAME|BOARD_PASSWORD|PORT|HOST)\s*=\s*(.*?)\s*$/);
+    const match = line.match(/^\s*(FEISHU_APP_ID|FEISHU_APP_SECRET|FEISHU_APP_TOKEN|FEISHU_TABLE_ID|BOARD_USERNAME|BOARD_PASSWORD|BOARD_PUBLIC_ORIGIN|PORT|HOST)\s*=\s*(.*?)\s*$/);
     if (match && process.env[match[1]] === undefined) {
       let value = match[2];
       if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
@@ -21,6 +21,9 @@ for (const file of [path.join(__dirname, '.env'), path.join(__dirname, '..', '.e
 }
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
+// Explicit public origin supports reverse proxies without trusting forwarded headers.
+const PUBLIC_ORIGIN = process.env.BOARD_PUBLIC_ORIGIN || '';
+if (PUBLIC_ORIGIN && (!/^https?:\/\//.test(PUBLIC_ORIGIN) || new URL(PUBLIC_ORIGIN).origin !== PUBLIC_ORIGIN)) throw new Error('BOARD_PUBLIC_ORIGIN 必须是完整来源，例如 https://board.example.com，不带路径或末尾斜杠');
 // 凭证来源优先级：环境变量 > 工作区 .feishu_app.env > dashboard/.feishu-app.json
 // 密钥只存在于服务端，不进前端、不进日志
 function loadCredentials() {
@@ -134,8 +137,8 @@ function pickLink(v) {
 
 function parentId(r) {
   const p = r.fields && r.fields['父记录'] && r.fields['父记录'][0];
-  if (!p || !p.record_ids || !p.record_ids.length) return null;
-  return p.record_ids[0];
+  if (!p) return null;
+  return typeof p === 'string' ? p : (p.record_ids?.[0] || p.record_id || p.id || null);
 }
 
 function transform(rows) {
@@ -151,6 +154,7 @@ function transform(rows) {
     const name = (f['公司名称'] || '').toString();
     (kids[pid] = kids[pid] || []).push({ name, post: f['岗位'] || '', status: one(f['投递']) });
     subs.push({
+      id: r.record_id, parentId: pid, hasDl: !!normDate(f['报名截止日']), apply: normDate(f['投递日期']), kids: [],
       name, parent: (pf['公司名称'] || '').toString(), type: one(f['单位类型']), city: f['城市'] || [],
       post: f['岗位'] || '', status: one(f['投递']), progress: f['进展'] || [],
       key: normDate(f['报名截止日']) || normDate(f['最新日期']), exam: f['笔试时间'] || '',
@@ -203,14 +207,18 @@ async function pullAll() {
 function buildFields(b) {
   if (!b || typeof b !== 'object' || Array.isArray(b)) throw new Error('请求必须是对象');
   if (!/^rec[a-zA-Z0-9]+$/.test(b.rid || '')) throw new Error('无效的记录 ID');
-  const allowed = ['rid', 'status', 'progress', 'key_date', 'comment'];
+  const allowed = ['rid', 'status', 'progress', 'key_date', 'comment', 'apply_date', 'exam'];
   if (Object.keys(b).some(k => !allowed.includes(k))) throw new Error('包含不支持的字段');
   if (b.status !== undefined && !['待投递','已投递','已截止','挂了','Offer','实习offer'].includes(b.status)) throw new Error('无效的投递状态');
   if (b.progress !== undefined && (!Array.isArray(b.progress) || b.progress.length > 7 || b.progress.some(p => !['ai面','测评','笔试','一面','二面','三面','体检'].includes(p)))) throw new Error('无效的进展');
   if (b.key_date != null && b.key_date !== '' && (typeof b.key_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(b.key_date) || !Number.isFinite(toMs(b.key_date)) || dayStr(toMs(b.key_date)) !== b.key_date)) throw new Error('无效的截止日期');
+  if (b.apply_date != null && (typeof b.apply_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(b.apply_date) || !Number.isFinite(toMs(b.apply_date)) || dayStr(toMs(b.apply_date)) !== b.apply_date)) throw new Error('无效投递日期');
+  if (b.exam !== undefined && (typeof b.exam !== 'string' || b.exam.length > 500)) throw new Error('无效考试时间');
   if (b.comment != null && (typeof b.comment !== 'string' || b.comment.length > 2000)) throw new Error('无效的备注');
-  if (!['status','progress','key_date'].some(k => Object.hasOwn(b, k))) throw new Error('没有可同步的字段');
+  if (!['status','progress','key_date','apply_date','exam'].some(k => Object.hasOwn(b, k))) throw new Error('没有可同步的字段');
   const f = {};
+  if (b.apply_date !== undefined) f['投递日期'] = b.apply_date ? toMs(b.apply_date) : null;
+  if (b.exam !== undefined) f['笔试时间'] = b.exam;
   if (b.status !== undefined) f['投递'] = b.status;
   if (b.progress !== undefined) f['进展'] = b.progress;
   if (b.key_date !== undefined) f['报名截止日'] = b.key_date ? toMs(b.key_date) : null;
@@ -262,9 +270,14 @@ function enqueueWrite(rid, fields) {
   return next.finally(() => { if (writes.get(rid) === next) writes.delete(rid); });
 }
 
-function createServer() {
+function createServer(options = {}) {
+  const store = require('./planner-store').createStore(options.stateFile || path.join(ROOT, '.planner-state.json'));
+  const notifier = require('./notifier').createNotifier({ file: options.notificationFile || path.join(ROOT, '.notifications.json'), store, pull: pullAll, getToken, actions: () => {
+    const file = path.join(ROOT, '.planner-actions.json');
+    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : [];
+  } });
   let windowStart = Date.now(), requestCount = 0;
-  return http.createServer(async (req, res) => {
+  const server = http.createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     const p = new URL(req.url, 'http://localhost').pathname;
@@ -272,12 +285,28 @@ function createServer() {
       return send(res, 200, { ok: true, configured: !!(APP_ID && APP_SECRET && APP_TOKEN && TABLE_ID), authConfigured: PASSWORD.length >= 16 });
     }
     if (!authorize(req, res)) return;
-    if (req.headers.origin && req.headers.origin !== 'http://' + req.headers.host && req.headers.origin !== 'https://' + req.headers.host) {
+    if (req.headers.origin && req.headers.origin !== PUBLIC_ORIGIN && req.headers.origin !== 'http://' + req.headers.host && req.headers.origin !== 'https://' + req.headers.host) {
       return send(res, 403, { ok: false, error: '不允许跨站请求' });
     }
     if (p.startsWith('/api/')) {
       if (Date.now() - windowStart >= 60000) { windowStart = Date.now(); requestCount = 0; }
       if (++requestCount > 120) return send(res, 429, { ok: false, error: '请求过于频繁' });
+    }
+    if (p === '/api/logs' && req.method === 'GET') {
+      try { return send(res, 200, { ok: true, logs: (store.read().logs || []).slice(0, 100) }); }
+      catch (_) { return send(res, 500, { ok: false, error: '本地改动记录暂时不可读取' }); }
+    }
+    if (p === '/api/planner' || p === '/api/notifications/test' || p === '/api/notifications/config') {
+      try {
+        if (p === '/api/planner' && req.method === 'GET') return send(res, 200, { ok: true, state: store.read(), channel: notifier.status() });
+        if (req.method !== 'POST') return send(res, 405, { ok: false });
+        if (!(req.headers['content-type'] || '').startsWith('application/json')) return send(res, 415, { ok: false, error: '需要 JSON 请求' });
+        let raw = '';
+        for await (const chunk of req) { raw += chunk; if (Buffer.byteLength(raw) > 16384) return send(res, 413, { ok: false, error: '请求过大' }); }
+        if (p === '/api/notifications/test') { await notifier.test(); return send(res, 200, { ok: true }); }
+        if (p === '/api/notifications/config') { notifier.configure(JSON.parse(raw)); return send(res, 200, { ok: true, channel: notifier.status() }); }
+        return send(res, 200, { ok: true, state: store.update(JSON.parse(raw)) });
+      } catch (error) { return send(res, 400, { ok: false, error: error.message }); }
     }
     if (p === '/api/pull' && req.method === 'GET') {
       try {
@@ -297,14 +326,21 @@ function createServer() {
         let body, fields;
         try { body = JSON.parse(raw); fields = buildFields(body); }
         catch (e) { return send(res, 400, { ok: false, error: e.message }); }
-        await enqueueWrite(body.rid, fields);
-        return send(res, 200, { ok: true, rid: body.rid });
+        const result = await enqueueWrite(body.rid, fields);
+        let warning = '';
+        try { store.appendLog({ rid: body.rid, name: result?.record?.fields?.['公司名称'] || body.rid, field: '岗位状态 / 时间', fields }); }
+        catch (_) { warning = '飞书已保存，但本地改动记录写入失败'; }
+        return send(res, 200, { ok: true, rid: body.rid, warning });
       } catch (e) { return send(res, 502, { ok: false, error: e.message }); }
     }
     if (p.startsWith('/api/')) return send(res, 405, { ok: false, error: '不支持的接口或请求方法' });
     if (!['GET', 'HEAD'].includes(req.method)) return send(res, 405, { ok: false });
     return serveStatic(req, res, p);
   });
+  let reminderTimer;
+  server.on('listening', () => { notifier.tick(); reminderTimer = setInterval(() => notifier.tick(), 60000); reminderTimer.unref(); });
+  server.on('close', () => clearInterval(reminderTimer));
+  return server;
 }
 if (require.main === module) createServer().listen(PORT, process.env.HOST || '0.0.0.0', () => console.log('listening on ' + PORT));
 module.exports = { createServer, buildFields, transform };
