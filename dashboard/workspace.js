@@ -24,8 +24,9 @@ const calendarTab=document.createElement('button');calendarTab.className='tab';c
 document.querySelector('.tabs').append(calendarTab);
 const todayTab=document.createElement('button');todayTab.className='tab';todayTab.dataset.v='today';todayTab.textContent='今日行动';document.querySelector('.tabs').prepend(todayTab);
 plannerRoot.before(document.querySelector('.tabs'));
-const overview=document.createElement('details');overview.className='card workspace-overview';overview.innerHTML='<summary>截止概览与未来 7 天 <span class="sub">展开查看</span></summary>';
-plannerRoot.after(overview);overview.append($('dl').closest('.card'),$('tl').closest('.card'));
+const overview=document.createElement('details');overview.className='card workspace-overview';overview.innerHTML='<summary>截止概览 <span class="sub">展开查看</span></summary>';
+plannerRoot.after(overview);overview.append($('dl').closest('.card'));
+$('kpis').after($('tl').closest('.card'));
 function setWorkspaceView(value){
   plannerRoot.classList.toggle('hide',value!=='today');overview.classList.toggle('hide',value!=='today');
 }
@@ -53,12 +54,14 @@ function renderWorkspace(){
     if(el.querySelector('[data-select-job]'))return;
     const r=jobById(el.dataset.id);if(!r)return;
     const label=document.createElement('label');label.className='card-select';label.innerHTML=`<input type="checkbox" data-select-job="${esc(r.id)}" aria-label="选择 ${esc(r.name)}" ${workspaceSelected.has(r.id)?'checked':''}>`;
+    const shortcuts=document.createElement('div');shortcuts.className='card-links';shortcuts.innerHTML=actionLinks(r).slice(0,2).map(l=>`<a class="btn" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.label)} ↗</a>`).join('');if(shortcuts.children.length)el.append(shortcuts);
     el.prepend(label);el.setAttribute('tabindex','0');el.setAttribute('role','button');el.setAttribute('aria-label',`${r.name}，查看岗位详情`);
     const post=document.createElement('div');post.className='card-post';post.textContent=r.post||'岗位信息待补充';el.querySelector('.t').after(post);
   });
   renderCalendar();
 }
 document.addEventListener('click',e=>{
+  if(e.target.closest('.card-links a')){e.stopImmediatePropagation();return;}
   const select=e.target.closest('.card-select');if(select){e.stopImmediatePropagation();return;}
   const groupJob=e.target.closest('[data-job]');if(groupJob){e.stopImmediatePropagation();const r=jobById(groupJob.dataset.job);if(r)openModal(r);return;}
   const detail=e.target.closest('[data-detail]');if(detail){e.preventDefault();const r=jobById(detail.dataset.detail);if(r)openModal(r);}
@@ -92,7 +95,7 @@ renderPlanner=function(){
   const head=plannerRoot.querySelector('.planner-head');
   head.innerHTML=`<div><div class="planner-eyebrow">TODAY'S FOCUS</div><h2>今日行动</h2><span class="sub">先处理紧急事项，再安排接下来的申请${workspaceActive()?' · 已应用搜索筛选':''}</span></div><div class="planner-actions"><span class="focus-total">${active.length}<small> 件待处理</small></span><button class="btn pri" data-planner="add" ${plannerReady?'':'disabled'}>＋ 添加待办</button></div>`;
   const groups=[['overdue','已逾期'],['today','今天'],['soon','未来 3 天']];
-  const row=t=>`<article data-action-id="${esc(t.id)}" class="action-row ${t.done?'done':''}"><div class="action-icon ${t.group}">${t.kind==='截止提醒'?'↗':t.kind==='笔试 / 面试'?'◷':'✓'}</div><div class="action-main"><div class="task-meta"><span class="kind">${esc(t.kind)}</span><time>${esc(t.undated?'待确认时间':t.date+(t.time?' '+t.time:''))}</time></div><strong>${esc(t.title)}</strong><p>${esc(t.detail||'')}</p><div class="focus-tools">${t.rid?`<button class="btn" data-detail="${esc(t.rid)}">岗位详情</button>`:''}${!t.done&&t.kind==='截止提醒'&&t.rid?`<button class="btn pri" data-apply="${esc(t.rid)}" data-apply-task="${esc(t.id)}" ${LIVE&&!saveInFlight?'':'disabled'}>标记已投递</button>`:''}${!t.done&&t.rid?actionLinks(jobById(t.rid)||{}).map(l=>`<a class="btn" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.label)} ↗</a>`).join(''):''}<button class="btn" data-focus-done="${esc(t.id)}" data-undone="${t.done?'1':'0'}" ${plannerReady&&!plannerBusy&&!(t.done&&t.snapshot&&t.kind==='截止提醒')?'':'disabled'}>${t.done&&t.snapshot&&t.kind==='截止提醒'?'已确认投递':t.done?'撤销完成':t.kind==='截止提醒'?'忽略此提醒':t.kind==='待补材料'?'标记已补充':'标记完成'}</button>${!t.done?`<button class="btn subtle" data-snooze="${esc(t.id)}">1 小时后提醒</button>`:''}${t.snoozeUntil>Date.now()?`<button class="btn" data-resume="${esc(t.id)}">现在处理</button>`:''}${t.id.startsWith('manual:')?`<button class="btn subtle" data-delete="${esc(t.id)}">删除</button>`:''}</div></div></article>`;
+  const row=t=>`<article data-action-id="${esc(t.id)}" class="action-row ${t.done?'done':''}"><div class="action-icon ${t.group}">${t.kind==='截止提醒'?'↗':t.kind==='笔试 / 面试'?'◷':'✓'}</div><div class="action-main"><div class="task-meta"><span class="kind">${esc(t.kind)}</span><time>${esc(t.undated?'待确认时间':t.date+(t.time?' '+t.time:''))}</time></div><strong>${esc(t.title)}</strong><p>${esc(t.detail||'')}</p><div class="focus-tools">${t.rid?`<button class="btn" data-detail="${esc(t.rid)}">岗位详情</button>`:''}${!t.done&&t.kind==='截止提醒'&&t.rid?`<button class="btn pri" data-apply="${esc(t.rid)}" data-apply-task="${esc(t.id)}" ${LIVE&&!saveInFlight?'':'disabled'}>标记已投递</button>`:''}${(t.rid?actionLinks(jobById(t.rid)||{}):WE.links({note:t.detail})).map(l=>`<a class="btn" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.label)} ↗</a>`).join('')}<button class="btn" data-focus-done="${esc(t.id)}" data-undone="${t.done?'1':'0'}" ${plannerReady&&!plannerBusy&&!(t.done&&t.snapshot&&t.kind==='截止提醒')?'':'disabled'}>${t.done&&t.snapshot&&t.kind==='截止提醒'?'已确认投递':t.done?'撤销完成':t.kind==='截止提醒'?'忽略此提醒':t.kind==='待补材料'?'标记已补充':'标记完成'}</button>${!t.done?`<button class="btn subtle" data-snooze="${esc(t.id)}">1 小时后提醒</button>`:''}${t.snoozeUntil>Date.now()?`<button class="btn" data-resume="${esc(t.id)}">现在处理</button>`:''}${t.id.startsWith('manual:')?`<button class="btn subtle" data-delete="${esc(t.id)}">删除</button>`:''}</div></div></article>`;
   plannerRoot.querySelector('.focus-list').innerHTML=`<div class="focus-tabs">${[['active','待处理',active.length],['done','已完成',shown.filter(t=>t.done).length],['later','稍后提醒',shown.filter(t=>!t.done&&t.snoozeUntil>Date.now()).length]].map(([id,label,count])=>`<button class="btn ${focusTab===id?'selected':''}" data-focus-tab="${id}">${label} <span>${count}</span></button>`).join('')}</div>${groups.map(([id,label])=>{const list=visible.filter(t=>t.group===id);return list.length?`<details data-focus-group="${id}" class="focus-group ${id}" ${id==='soon'?'':'open'}><summary>${label}<span>${list.length} 项</span></summary>${list.map(row).join('')}</details>`:'';}).join('')||'<div class="planner-empty">这里暂时没有事项。可以添加下一步计划。</div>'}`;
   const list=plannerRoot.querySelector('.focus-list');
   list.dataset.viewKey=viewKey;
@@ -188,7 +191,7 @@ openModal=function(r){
   if(!r)return;workspaceReturnFocus=document.activeElement;currentRid=r.id;
   originalOpenModal(r);$('mask').classList.add('drawer-mode');$('modal').setAttribute('role','dialog');$('modal').setAttribute('aria-modal','true');$('modal').setAttribute('aria-label',r.name+' 岗位详情');
   $('modal').querySelector('.close').outerHTML='<button class="close" aria-label="关闭岗位详情" onclick="closeM()">×</button>';
-  const links=WE.links(r),section=document.createElement('section');section.className='detail-section';
+  const links=actionLinks(r),section=document.createElement('section');section.className='detail-section';
   section.innerHTML=`<h4>常用入口</h4><div class="shortcut-list">${links.map(l=>`<a class="shortcut" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer"><strong>${esc(l.label)} ↗</strong><small>${esc(l.host)}</small></a>`).join('')||'<p class="sub">尚未填写链接，可在飞书的链接、笔试时间或备注字段补充。</p>'}</div><button class="btn" id="copy-job-info">复制岗位摘要</button><span class="sub" id="copy-result" role="status"></span>`;
   $('modal').querySelector('h3').after(section);
   $('copy-job-info').onclick=async()=>{try{await navigator.clipboard.writeText([r.name,r.post,'状态：'+r.status,'投递日期：'+(r.apply||'未填写'),r.exam,...links.map(l=>l.url)].filter(Boolean).join('\n'));$('copy-result').textContent=' 已复制';}catch(_){$('copy-result').textContent=' 复制失败，请手动选择文字复制';}};

@@ -129,11 +129,7 @@ function normDate(v) {
   return m ? m[1] : null;
 }
 
-function pickLink(v) {
-  if (!v) return '';
-  const m = String(v).match(/https?:\/\/[^\s)\]】]+/);
-  return m ? m[0] : '';
-}
+function pickLink(v) { return require('./link-utils').extract(v)[0] || ''; }
 
 function parentId(r) {
   const p = r.fields && r.fields['父记录'] && r.fields['父记录'][0];
@@ -158,7 +154,7 @@ function transform(rows) {
       name, parent: (pf['公司名称'] || '').toString(), type: one(f['单位类型']), city: f['城市'] || [],
       post: f['岗位'] || '', status: one(f['投递']), progress: f['进展'] || [],
       key: normDate(f['报名截止日']) || normDate(f['最新日期']), exam: f['笔试时间'] || '',
-      note: f['备注'] || '', link: pickLink(f['链接']),
+      note: f['备注'] || '', link: pickLink(f['链接']), urls: require('./link-utils').extract([f['链接'], f['笔试时间'], f['备注']]),
     });
   });
 
@@ -177,7 +173,7 @@ function transform(rows) {
       apply: normDate(f['投递日期']),
       exam: f['笔试时间'] || '',
       note: f['备注'] || '',
-      link: pickLink(f['链接']),
+      link: pickLink(f['链接']), urls: require('./link-utils').extract([f['链接'], f['笔试时间'], f['备注']]),
       kids: kids[r.record_id] || [],
     };
   });

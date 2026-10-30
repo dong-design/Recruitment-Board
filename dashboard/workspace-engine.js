@@ -29,11 +29,13 @@
     return true;
   }
   function links(r){
-    const urls=[r.link,...(String(r.exam||'')+' '+String(r.note||'')).matchAll(/https?:\/\/[^\s<>"'）)\]】]+/g)].map(v=>Array.isArray(v)?v[0]:v);
-    return [...new Set(urls.filter(Boolean))].flatMap(url=>{
-      try { const u=new URL(url); return ['http:','https:'].includes(u.protocol)?[{url:u.href,label:url===r.link?'招聘 / 投递入口':/exam|test|kaoshi/i.test(url)?'考试链接':/pdf|doc|drive|file/i.test(url)?'材料 / 附件':'相关链接',host:u.hostname}]:[]; } catch { return []; }
+    const extractor=typeof module!=='undefined'?require('./link-utils'):root.LinkUtils;
+    const primary=extractor.extract(r.link);
+    return extractor.extract([r.link,r.urls,r.exam,r.note]).map(url=>{
+      const u=new URL(url);return {url,label:primary.includes(url)?'招聘 / 投递入口':/exam|test|kaoshi/i.test(url)?'考试链接':/pdf|doc|drive|file/i.test(url)?'材料 / 附件':'相关链接',host:u.hostname};
     });
   }
+
   function focus(records, actions, state, reminderItems, now=Date.now()){
     const today=day(now), result=new Map(reminderItems.map(t=>[t.id,{...t}]));
     for (const r of records) {

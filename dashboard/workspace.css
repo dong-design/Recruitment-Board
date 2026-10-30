@@ -9,3 +9,5 @@ body{background:#f5f7fb;color:#192c4b;font-family:Inter,"PingFang SC","Microsoft
 @media(max-width:600px){.kpis{grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}.kpi{padding:11px 6px;border-radius:10px;min-width:0;text-align:center}.kpi .l{font-size:9px;white-space:nowrap}.kpi .n{font-size:21px}.focus-list{overflow:visible}.calendar-scroll{border-radius:8px}}
 
 .field-change{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin-top:12px;padding:10px 12px;background:#f7f9fd;border-radius:8px;font-size:12px;overflow-wrap:anywhere}.field-change>b{min-width:70px;color:#65758d}.field-change .old-value{color:#8a96aa}.field-change>strong{color:#3456a5;font-weight:500}
+
+.card-links{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}.card-links a{font-size:11px;text-decoration:none;padding:4px 8px;min-height:28px}

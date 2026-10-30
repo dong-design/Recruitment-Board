@@ -64,11 +64,18 @@ def norm_date(v):
     return m.group(1) if m else None
 
 
+def extract_links(v):
+    if isinstance(v, list):
+        return list(dict.fromkeys(url for item in v for url in extract_links(item)))
+    if isinstance(v, dict):
+        return extract_links([v.get(key) for key in ("link", "url", "href", "text", "value")])
+    if not isinstance(v, str):
+        return []
+    return list(dict.fromkeys(url.rstrip("，。；、！？,;.!?") for url in re.findall(r"https?://[^\s<>\"'\[\]（）()【】]+", v, re.I)))
+
+
 def pick_link(v):
-    if not v:
-        return ""
-    m = re.search(r"https?://[^\s)\]】]+", str(v))
-    return m.group(0) if m else ""
+    return next(iter(extract_links(v)), "")
 
 
 def build():
@@ -102,6 +109,7 @@ def build():
             "exam": r.get("笔试时间") or "",
             "note": r.get("备注") or "",
             "link": pick_link(r.get("链接")),
+            "urls": extract_links([r.get("链接"), r.get("笔试时间"), r.get("备注")]),
         })
 
     recs = []
@@ -126,6 +134,7 @@ def build():
             "exam": r.get("笔试时间") or "",
             "note": note,
             "link": pick_link(r.get("链接")),
+            "urls": extract_links([r.get("链接"), r.get("笔试时间"), r.get("备注")]),
             "kids": children.get(r["record_id"], []),
         })
 
@@ -1249,7 +1258,7 @@ def main():
     with open(os.path.join(OUT_DIR, "workspace.css"), encoding="utf-8") as f:
         html = html.replace("</style>", f.read() + "</style>", 1)
     extra = ""
-    for name in ["planner-engine.js", "planner.js", "date-picker.js", "workspace-engine.js", "workspace.js"]:
+    for name in ["planner-engine.js", "planner.js", "date-picker.js", "link-utils.js", "workspace-engine.js", "workspace.js"]:
         with open(os.path.join(OUT_DIR, name), encoding="utf-8") as f:
             extra += "<script>" + f.read() + "</script>"
     html = html.replace("</body>", extra + "</body>", 1)
