@@ -1,0 +1,4 @@
+{
+  "webhook": "https://open.feishu.cn/open-apis/bot/v2/hook/替换为你的机器人地址",
+  "secret": "启用签名校验时填写，否则删除此字段"
+}

@@ -1,0 +1,6 @@
+{
+  "_说明": "复制为 config.json 后填入个人配置，仅保存在本地。云客户端配置可选，不填写服务端密钥。",
+  "feishuUrl": "https://你的飞书域名.feishu.cn/base/你的base_token?table=你的table_id",
+  "source": "feishu_records.ndjson",
+  "cloud": {}
+}
