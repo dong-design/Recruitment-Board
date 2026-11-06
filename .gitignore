@@ -33,3 +33,6 @@ node_modules/
 *.bak
 *.backup
 /privacy-*.json
+
+# 运行时状态（与部署目录分离，绝不入库）
+.board-runtime/

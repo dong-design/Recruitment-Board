@@ -11,7 +11,7 @@ const path = require('path');
 for (const file of [path.join(__dirname, '.env'), path.join(__dirname, '..', '.env'), path.join(__dirname, '..', '.feishu_app.env')]) {
   if (!fs.existsSync(file)) continue;
   for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const match = line.match(/^\s*(FEISHU_APP_ID|FEISHU_APP_SECRET|FEISHU_APP_TOKEN|FEISHU_TABLE_ID|BOARD_USERNAME|BOARD_PASSWORD|BOARD_PUBLIC_ORIGIN|PORT|HOST)\s*=\s*(.*?)\s*$/);
+    const match = line.match(/^\s*(FEISHU_APP_ID|FEISHU_APP_SECRET|FEISHU_APP_TOKEN|FEISHU_TABLE_ID|BOARD_USERNAME|BOARD_PASSWORD|BOARD_PUBLIC_ORIGIN|BOARD_STATE_FILE|BOARD_NOTIFICATION_FILE|BOARD_RUNTIME_DIR|PORT|HOST)\s*=\s*(.*?)\s*$/);
     if (match && process.env[match[1]] === undefined) {
       let value = match[2];
       if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
@@ -21,6 +21,43 @@ for (const file of [path.join(__dirname, '.env'), path.join(__dirname, '..', '.e
 }
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
+
+// 运行时状态（待办标记、通知台账、状态备份）与部署/源码目录分离：
+// 整目录覆盖式发布会把本地残留的空状态文件推上去，抹掉线上标记。
+// 默认放到上一级目录；父目录不可写时回退 ROOT，保证服务始终能启动。
+function writableDir(dir) {
+  try {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const probe = path.join(dir, '.write-probe-' + process.pid + '-' + Math.random().toString(36).slice(2));
+    fs.writeFileSync(probe, '', { mode: 0o600 });
+    fs.unlinkSync(probe);
+    return true;
+  } catch (_) { return false; }
+}
+const RUNTIME_DIR = (() => {
+  const external = path.resolve(ROOT, '..', '.board-runtime');
+  for (const dir of [process.env.BOARD_RUNTIME_DIR, external, ROOT].filter(Boolean)) {
+    if (writableDir(dir)) return dir;
+  }
+  return ROOT;
+})();
+const runtimeFile = name => path.join(RUNTIME_DIR, name);
+
+// 一次性迁移旧状态；新目录已有数据时绝不覆盖。
+function migrateRuntimeState(fromDir = ROOT, toDir = RUNTIME_DIR) {
+  if (toDir === fromDir) return;
+  for (const name of ['.planner-state.json', '.notifications.json']) {
+    const from = path.join(fromDir, name), to = path.join(toDir, name);
+    if (!fs.existsSync(from) || fs.existsSync(to)) continue;
+    try { fs.copyFileSync(from, to); fs.unlinkSync(from); } catch (_) { /* 下次再试 */ }
+  }
+  const fromBak = path.join(fromDir, '.planner-state.json.backups');
+  const toBak = path.join(toDir, '.planner-state.json.backups');
+  if (fs.existsSync(fromBak) && !fs.existsSync(toBak)) {
+    try { fs.cpSync(fromBak, toBak, { recursive: true }); fs.rmSync(fromBak, { recursive: true, force: true }); }
+    catch (_) { /* 保留旧备份 */ }
+  }
+}
 // Explicit public origin supports reverse proxies without trusting forwarded headers.
 const PUBLIC_ORIGIN = process.env.BOARD_PUBLIC_ORIGIN || '';
 if (PUBLIC_ORIGIN && (!/^https?:\/\//.test(PUBLIC_ORIGIN) || new URL(PUBLIC_ORIGIN).origin !== PUBLIC_ORIGIN)) throw new Error('BOARD_PUBLIC_ORIGIN 必须是完整来源，例如 https://board.example.com，不带路径或末尾斜杠');
@@ -275,8 +312,9 @@ function enqueueWrite(rid, fields) {
 }
 
 function createServer(options = {}) {
-  const store = require('./planner-store').createStore(options.stateFile || path.join(ROOT, '.planner-state.json'));
-  const notifier = require('./notifier').createNotifier({ file: options.notificationFile || path.join(ROOT, '.notifications.json'), store, pull: pullAll, getToken, actions: () => {
+  migrateRuntimeState();
+  const store = require('./planner-store').createStore(options.stateFile || process.env.BOARD_STATE_FILE || runtimeFile('.planner-state.json'));
+  const notifier = require('./notifier').createNotifier({ file: options.notificationFile || process.env.BOARD_NOTIFICATION_FILE || runtimeFile('.notifications.json'), store, pull: pullAll, getToken, actions: () => {
     const file = path.join(ROOT, '.planner-actions.json');
     return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : [];
   } });
@@ -286,7 +324,7 @@ function createServer(options = {}) {
     res.setHeader('Referrer-Policy', 'no-referrer');
     const p = new URL(req.url, 'http://localhost').pathname;
     if (p === '/api/health' && req.method === 'GET') {
-      return send(res, 200, { ok: true, configured: !!(APP_ID && APP_SECRET && APP_TOKEN && TABLE_ID), authConfigured: PASSWORD.length >= 16 });
+      return send(res, 200, { ok: true, configured: !!(APP_ID && APP_SECRET && APP_TOKEN && TABLE_ID), authConfigured: PASSWORD.length >= 16, runtime: RUNTIME_DIR === ROOT ? 'internal' : 'external' });
     }
     if (!authorize(req, res)) return;
     if (req.headers.origin && req.headers.origin !== PUBLIC_ORIGIN && req.headers.origin !== 'http://' + req.headers.host && req.headers.origin !== 'https://' + req.headers.host) {
@@ -347,4 +385,4 @@ function createServer(options = {}) {
   return server;
 }
 if (require.main === module) createServer().listen(PORT, process.env.HOST || '0.0.0.0', () => console.log('listening on ' + PORT));
-module.exports = { createServer, buildFields, transform };
+module.exports = { createServer, buildFields, transform, RUNTIME_DIR, migrateRuntimeState };

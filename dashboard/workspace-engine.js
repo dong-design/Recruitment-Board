@@ -36,18 +36,24 @@
     });
   }
 
+  // 超过 ARCHIVE_DAYS 的历史事项不再默认涌入「待处理」：
+  // 状态文件一旦丢失（如整目录发布覆盖），陈年笔试会全部复活成僵尸卡片。
+  // 已完成的历史事项仍保留，方便回看；未完成且过期的自动归档。
+  const ARCHIVE_DAYS = 14;
   function focus(records, actions, state, reminderItems, now=Date.now()){
-    const today=day(now), result=new Map(reminderItems.map(t=>[t.id,{...t}]));
+    const today=day(now), archiveFloor=shift(today,-ARCHIVE_DAYS), result=new Map(reminderItems.map(t=>[t.id,{...t}]));
     for (const r of records) {
       if (['挂了','已截止','Offer','实习offer'].includes(r.status)) continue;
       if(r.status==='待投递' && r.hasDl && r.key<today) {
         const id=`deadline:${r.id}:${r.key}:0`;
+        if (r.key<archiveFloor && !state.marks?.[id]?.done) continue;
         result.set(id,{id,rid:r.id,title:r.name,kind:'截止提醒',date:r.key,detail:'已过报名截止日，请确认是否仍可报名'});
       }
     }
     for(const e of events(records).filter(e=>e.date<=shift(today,3))) {
       const r=records.find(r=>r.id===e.rid);
       if (['挂了','已截止','Offer','实习offer'].includes(r?.status)) continue;
+      if (e.date<archiveFloor && !state.marks?.[e.id]?.done) continue;
       result.set(e.id,{...e, detail:(e.date<today?'待确认是否已参加 · ':'')+e.detail});
     }
     for(const t of Object.values(state.manual||{})) if(t.date<=shift(today,3)) result.set(t.id,{...t});
