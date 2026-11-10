@@ -159,7 +159,7 @@ function openBatch(){
 }
 
 function renderCalendar(){
-  const events=WE.events(allJobs().filter(workspaceMatch),plannerState.manual);
+  const events=WE.events(allJobs().filter(workspaceMatch),plannerState.manual,plannerState.marks);
   const first=calendarMode==='month'?calendarDate.slice(0,7)+'-01':calendarDate;
   const weekday=(new Date(first+'T12:00:00+08:00').getUTCDay()+6)%7;
   const start=WE.shift(first,-weekday),count=calendarMode==='month'?42:7;
@@ -175,7 +175,7 @@ calendarRoot.addEventListener('click',e=>{
   renderCalendar();
 });
 function openCalendarDay(date){
-  const events=WE.events(allJobs().filter(workspaceMatch),plannerState.manual).filter(e=>e.date===date);
+  const events=WE.events(allJobs().filter(workspaceMatch),plannerState.manual,plannerState.marks).filter(e=>e.date===date);
   plannerModal(`<h3>${esc(date)} 的笔面试安排</h3><p class="sub">${events.length} 项 · 点击岗位可查看详情并编辑时间</p>${events.map(e=>`<article class="calendar-agenda"><span class="pill ${e.conflict?'w':''}">${esc(e.time||'时间待定')}${e.end?'—'+esc(e.end):''}${e.conflict?' · 时间冲突':''}</span><h4>${esc(e.title)}</h4><p>${esc(e.detail||'')}</p>${e.rid?`<button class="btn" data-detail="${esc(e.rid)}">查看岗位</button>`:`<button class="btn" data-manual-edit="${esc(e.id)}">编辑日程</button>`}</article>`).join('')||'<div class="planner-empty">当天暂无笔面试安排。</div>'}<button class="btn pri" id="add-on-day">＋ 添加当天日程</button>`);
   $('add-on-day').onclick=()=>{addPlannerTask();$('planner-add').elements.date.value=date;$('planner-add').elements.kind.value='笔试 / 面试';};
 }
