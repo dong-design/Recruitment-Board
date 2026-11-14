@@ -2,7 +2,7 @@
 const WE = WorkspaceEngine;
 let workspaceQuery = '', workspaceQuick = '', workspaceSelected = new Set(), focusTab = 'active';
 let calendarDate = WE.day(Date.now()), calendarMode = 'month', workspaceReturnFocus = null;
-try { const saved=JSON.parse(localStorage.getItem('recruit.workspace.filters')||'{}'); workspaceQuery=String(saved.query||''); workspaceQuick=['deadline','exam','waiting','material'].includes(saved.quick)?saved.quick:''; } catch (_) {}
+try { const saved=JSON.parse(localStorage.getItem('recruit.workspace.filters')||'{}'); workspaceQuick=['deadline','exam','waiting','material'].includes(saved.quick)?saved.quick:''; localStorage.setItem('recruit.workspace.filters',JSON.stringify({quick:workspaceQuick})); } catch (_) {}
 function workspaceMatch(r){return WE.matches(r,workspaceQuery,workspaceQuick);}
 function workspaceActive(){return !!(workspaceQuery.trim()||workspaceQuick);}
 function actionLinks(r){
@@ -35,11 +35,22 @@ document.querySelectorAll('.tabs .tab').forEach(t=>{t.onclick=()=>{
   ['board','table','sub','act','log','calendar'].forEach(v=>$('v-'+v).classList.toggle('hide',v!==t.dataset.v));
   if(t.dataset.v==='log')loadLogs(); if(t.dataset.v==='calendar')renderCalendar();
 };});
-function persistSearch(){try{localStorage.setItem('recruit.workspace.filters',JSON.stringify({query:workspaceQuery,quick:workspaceQuick}));}catch(_){} }
-$('global-search').oninput=e=>{workspaceQuery=e.target.value;persistSearch();renderAll();};
+function persistSearch(){try{localStorage.setItem('recruit.workspace.filters',JSON.stringify({quick:workspaceQuick}));}catch(_){} }
+let searchTimer = null, searchComposing = false;
+function clearSearchText(){clearTimeout(searchTimer);searchComposing=false;workspaceQuery='';$('global-search').value='';persistSearch();renderAll();}
+$('global-search').autocomplete='off';
+$('global-search').placeholder='搜索公司简称、名称片段、岗位、城市…';
+// 手动刷新清空搜索词；后台自动同步保留正在输入的内容。
+$('btn-refresh').addEventListener('click',clearSearchText);
+window.addEventListener('pageshow',clearSearchText);
+function applyWorkspaceSearch(){clearTimeout(searchTimer);workspaceQuery=$('global-search').value;persistSearch();renderAll();}
+$('global-search').addEventListener('compositionstart',()=>{searchComposing=true;clearTimeout(searchTimer);});
+$('global-search').addEventListener('compositionend',()=>{searchComposing=false;clearTimeout(searchTimer);searchTimer=setTimeout(applyWorkspaceSearch,200);});
+$('global-search').oninput=()=>{clearTimeout(searchTimer);if(!searchComposing)searchTimer=setTimeout(applyWorkspaceSearch,200);};
+$('global-search').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&!searchComposing)applyWorkspaceSearch();});
 searchRoot.addEventListener('click',e=>{
-  const quick=e.target.closest('[data-quick]');if(quick){workspaceQuick=quick.dataset.quick;persistSearch();renderAll();}
-  if(e.target.id==='clear-global'){workspaceQuery='';workspaceQuick='';$('global-search').value='';persistSearch();renderAll();}
+  const quick=e.target.closest('[data-quick]');if(quick){clearTimeout(searchTimer);workspaceQuery=$('global-search').value;workspaceQuick=quick.dataset.quick;persistSearch();renderAll();}
+  if(e.target.id==='clear-global'){clearTimeout(searchTimer);workspaceQuery='';workspaceQuick='';$('global-search').value='';persistSearch();renderAll();}
   if(e.target.id==='batch-open')openBatch();
   if(e.target.id==='batch-clear'){workspaceSelected.clear();renderAll();}
   if(e.target.id==='select-results'){allJobs().filter(workspaceMatch).forEach(r=>workspaceSelected.add(r.id));renderAll();}

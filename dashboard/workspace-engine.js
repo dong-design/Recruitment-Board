@@ -35,9 +35,29 @@
     merged.sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'99:99').localeCompare(b.time||'99:99'));
     return merged.map(a=>({...a, conflict:!!a.time && merged.some(b=>a.id!==b.id && a.date===b.date && b.time && (a.time===b.time || (a.end && b.end && a.time<b.end && b.time<a.end)))}));
   }
+  // 搜索归一：全角/半角、大小写、标点统一；支持常见公司简称与名称内跳字匹配。
+  const searchAliases={中行:'中国银行',工行:'工商银行',农行:'农业银行',建行:'建设银行',交行:'交通银行',招行:'招商银行',邮储:'邮政储蓄银行',国网:'国家电网',南网:'南方电网',中石油:'中国石油',中石化:'中国石化',中海油:'中国海洋石油'};
+  const normalizeSearch=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu,'');
+  function fuzzyName(text,word){
+    if(!/^[\u3400-\u9fff]{2,}$/.test(word))return false;
+    // 只在单个名称/岗位内跳字，不跨字段拼接，避免误命中无关公司。
+    for(let start=text.indexOf(word[0]);start!==-1;start=text.indexOf(word[0],start+1)){
+      let at=start;
+      for(let i=1;i<word.length&&at!==-1;i++)at=text.indexOf(word[i],at+1);
+      if(at!==-1&&at-start+1<=word.length+6)return true;
+    }
+    return false;
+  }
   function matches(r, query='', quick='', today=day(Date.now())){
-    const text=[r.name,r.parent,r.post,r.type,...(r.city||[]),r.status,...(r.progress||[]),r.note].join(' ').toLowerCase();
-    if (!query.toLowerCase().trim().split(/\s+/).every(word=>text.includes(word))) return false;
+    const names=[r.name,r.parent,r.post].map(normalizeSearch);
+    const fields=[...names,...[r.type,...(r.city||[]),r.status,...(r.progress||[]),r.note].map(normalizeSearch)];
+    const words=String(query).normalize('NFKC').trim().split(/\s+/).filter(Boolean).map(normalizeSearch);
+    if(!words.every(word=>{
+      if(!word)return false;
+      const alias=searchAliases[word];
+      if(alias)return names.some(text=>text.includes(word)||text.includes(alias));
+      return fields.some(text=>text.includes(word))||names.some(text=>fuzzyName(text,word));
+    }))return false;
     if (quick==='deadline') return r.status==='待投递' && r.hasDl && r.key>=today && r.key<=shift(today,3);
     if (quick==='exam') return dates(r.exam).some(d=>d.date>=today && d.date<=shift(today,6));
     if (quick==='waiting') return r.status==='已投递' && !(r.progress||[]).length;

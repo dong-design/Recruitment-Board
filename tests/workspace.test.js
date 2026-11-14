@@ -20,6 +20,19 @@ test('quick links reject script protocols and deduplicate urls',()=>{
   const links=W.links({link:'javascript:alert(1)',note:'https://example.com/exam https://example.com/exam'});
   assert.equal(links.length,1);assert.equal(links[0].label,'考试链接');
 });
+test('fuzzy company search supports aliases, omitted name segments and multiword constraints',()=>{
+  const bank={name:'中国银行北京分行',post:'科技岗',city:['北京']};
+  assert.equal(W.matches(bank,'中行 北京 科技'),true);
+  assert.equal(W.matches({name:'中国建设银行'},'中行'),false);
+  assert.equal(W.matches({name:'中国农业银行'},'农行'),true);
+  assert.equal(W.matches({name:'五矿集团财务有限责任公司'},'五矿财务'),true);
+  assert.equal(W.matches({name:'财务五矿'},'五矿财务'),false);
+  assert.equal(W.matches(bank,'中行 深圳'),false);
+  assert.equal(W.matches({name:'五矿',note:'集团财务'},'五矿财务'),false);
+  assert.equal(W.matches({name:'中国人保（PICC）'},'ｐｉｃｃ'),true);
+  assert.equal(W.matches(bank,'.*'),false);
+  assert.equal(W.matches(bank,'   '),true);
+});
 test('daily action retains past exams and deadlines and applies persisted completion',()=>{
   const now=Date.parse('2026-11-01T08:00:00+08:00');
   const r={id:'r1',name:'银行',status:'待投递',hasDl:true,key:'2026-10-31',exam:'2026-10-30 09:00'};
