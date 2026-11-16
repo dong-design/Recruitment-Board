@@ -218,6 +218,12 @@ node --test tests/*.test.js
 
 如果这个项目帮你理清了投递节奏，欢迎点一个 **Star**，让更多求职者找到它。
 
+## 界面资源
+
+`dashboard/sidebar.js` + `sidebar.css` 提供左侧分组导航（固定视口高度、可收起，手机为抽屉菜单）；`dashboard/detail-dialog.js` + `detail-dialog.css` 提供居中岗位详情弹窗（三个页签、同窗编辑）；`favicon.svg` 是标签页图标。三者均为纯界面代码，不含任何个人数据。
+
+`build_dashboard.py` 已把 CSS 注入 `</head>` 前（id `recruit-sidebar-style` / `recruit-detail-style`），JS 注入原有脚本之后、`</body>` 前（id `recruit-sidebar-script` / `recruit-detail-script`）。若要在**已生成的私有页面**上只更新界面而不触碰数据，用 `tools/install_sidebar_assets.py --html <私有页面>` / `tools/install_detail_assets.py --html <私有页面>`：它们只替换带 id 的资源块，保留原 DATA 和其他字节，首次执行会在同目录生成含个人数据的隐藏备份，务必保持私有。
+
 ## License
 
 [MIT](LICENSE)

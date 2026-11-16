@@ -139,7 +139,7 @@ TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>秋招进度看板</title>
+<title>秋招进度看板</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2215%22%20fill%3D%22%23405cdf%22%2F%3E%3Crect%20x%3D%2213%22%20y%3D%2215%22%20width%3D%2238%22%20height%3D%2236%22%20rx%3D%226%22%20fill%3D%22white%22%2F%3E%3Cpath%20d%3D%22M21%2012v9m22-9v9M14%2027h36%22%20fill%3D%22none%22%20stroke%3D%22%23c4d0ff%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22m23%2038%206%206%2013-13%22%20fill%3D%22none%22%20stroke%3D%22%23405cdf%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#F5F6F8;color:#1C1E21;font-size:14px;line-height:1.6;padding:20px}
@@ -1239,10 +1239,18 @@ def main():
         html = html.replace("</style>", f.read() + "</style>", 1)
     with open(os.path.join(OUT_DIR, "workspace.css"), encoding="utf-8") as f:
         html = html.replace("</style>", f.read() + "</style>", 1)
+    # UI-only presentation assets (sidebar, centered job detail). Keep the
+    # injection ids stable so the private installer can replace them in place.
+    for asset, ident in [("sidebar.css", "recruit-sidebar-style"), ("detail-dialog.css", "recruit-detail-style")]:
+        with open(os.path.join(OUT_DIR, asset), encoding="utf-8") as f:
+            html = html.replace("</head>", f'<style id="{ident}">' + f.read() + "</style></head>", 1)
     extra = ""
     for name in ["planner-engine.js", "planner.js", "date-picker.js", "link-utils.js", "workspace-engine.js", "workspace.js"]:
         with open(os.path.join(OUT_DIR, name), encoding="utf-8") as f:
             extra += "<script>" + f.read() + "</script>"
+    for asset, ident in [("sidebar.js", "recruit-sidebar-script"), ("detail-dialog.js", "recruit-detail-script")]:
+        with open(os.path.join(OUT_DIR, asset), encoding="utf-8") as f:
+            extra += f'<script id="{ident}">' + f.read() + "</script>"
     html = html.replace("</body>", extra + "</body>", 1)
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(html)
